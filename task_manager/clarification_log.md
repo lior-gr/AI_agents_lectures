@@ -196,3 +196,68 @@ Write beginner-level comments that explicitly cover:
 4) who enforces schema (model guidance + app-side validation),
 5) one plain-language example of valid vs invalid argument JSON.
 ```
+
+## Issue 5: MCP transport and persistence terminology
+1. Used prompt:
+```text
+Task - Create MCP Server
+
+Create mcp_server.py.
+Requirements:
+Runs as a standalone Python process
+Reads JSON messages from stdin
+Writes JSON responses to stdout
+
+Supports:
+add_task
+list_tasks
+complete_task
+
+Calls storage.py internally
+Includes detailed comments explaining:
+Message format
+Tool dispatch
+Why this is decoupled from the agent
+Keep it synchronous and simple.
+
+Expected MCP Message Format
+Request:
+
+{
+  "tool": "add_task",
+  "arguments": { "text": "Buy milk" }
+}
+Response:
+
+{
+  "status": "ok",
+  "result": "..."
+}
+Keep it deterministic.
+```
+1.1. Highlighted section that drove later clarifications:
+```text
+Reads JSON messages from stdin
+Writes JSON responses to stdout
+Calls storage.py internally
+```
+
+2. Following clarification request:
+```text
+what is JSON persistence? I am not familiar with the term
+```
+```text
+what it means that the mcp server is using stdin and stdout?
+```
+```text
+but how the communication is being done? writing to a shell command? communicating through files? something else?
+```
+
+3. Improved prompt suggestion by Codex:
+```text
+When implementing mcp_server.py, add a short beginner section in comments that defines:
+1) "JSON persistence" (data stored in tasks.json across runs),
+2) stdin/stdout transport (request/response lines exchanged through process pipes),
+3) that communication is inter-process stream I/O (not files, not HTTP).
+Also include one concrete end-to-end example showing one input line and one output line.
+```
