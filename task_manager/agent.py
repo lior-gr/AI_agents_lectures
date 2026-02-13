@@ -25,8 +25,8 @@ DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 # Hard step limit requested for this minimal agent.
 DEFAULT_MAX_STEPS = 5
 
-# Per-call token cap requested in the prompt.
-MAX_TOKENS_PER_CALL = 800
+# Per-call completion token cap requested in the prompt.
+MAX_COMPLETION_TOKENS_PER_CALL = 800
 
 # Use a low temperature for more deterministic outputs.
 TEMPERATURE = 0.2
@@ -69,6 +69,58 @@ def build_system_prompt() -> str:
     return f"{SYSTEM_PROMPT}\n\n[Task Planning Skill]\n{skill_text}"
 
 
+def _is_unsupported_token_param_error(exc: Exception, param_name: str) -> bool:
+    """Return True when API error indicates a specific token parameter is unsupported."""
+    message = str(exc)
+    return "unsupported_parameter" in message and f"'{param_name}'" in message
+
+
+def _format_openai_error_message(exc: Exception, model: str) -> str:
+    """Convert low-level API exceptions into a human-readable message."""
+    message = str(exc)
+    return (
+        f"OpenAI request failed for model '{model}'. "
+        f"Details: {message}. "
+        "Please verify model access and API parameter compatibility."
+    )
+
+
+def _create_chat_completion_with_token_compat(client: OpenAI, model: str, messages: list[dict]):
+    """Create chat completion with compatibility fallback for token-limit parameter names.
+
+    Some models accept `max_completion_tokens`; others accept `max_tokens`.
+    This wrapper tries both so switching models does not crash the app.
+    """
+    token_param_candidates = ["max_completion_tokens", "max_tokens"]
+
+    for idx, token_param in enumerate(token_param_candidates):
+        try:
+            return client.chat.completions.create(
+                model=model,
+                messages=messages,
+                # Tool schemas are defined in tools.py so the agent does not own task logic.
+                tools=TOOL_SCHEMAS,
+                tool_choice="auto",
+                temperature=TEMPERATURE,
+                # Token guardrail remains capped at 800 completion tokens per call.
+                **{token_param: MAX_COMPLETION_TOKENS_PER_CALL},
+            )
+        except Exception as exc:
+            is_last_attempt = idx == len(token_param_candidates) - 1
+            if _is_unsupported_token_param_error(exc, token_param) and not is_last_attempt:
+                LOGGER.warning(
+                    "Model '%s' rejected token parameter '%s'. Retrying with '%s'.",
+                    model,
+                    token_param,
+                    token_param_candidates[idx + 1],
+                )
+                continue
+            raise RuntimeError(_format_openai_error_message(exc, model)) from exc
+
+    # Defensive fallback; logically unreachable.
+    raise RuntimeError(f"OpenAI request failed for model '{model}'.")
+
+
 def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_MAX_STEPS) -> str:
     """Run a minimal agent loop for the given user goal."""
     if not goal.strip():
@@ -102,16 +154,16 @@ def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_M
         for step in range(1, max_steps + 1):
             LOGGER.info("Step %s/%s: requesting model response", step, max_steps)
 
-            response = client.chat.completions.create(
-                model=chosen_model,
-                messages=messages,
-                # Tool schemas are defined in tools.py so the agent does not own task logic.
-                tools=TOOL_SCHEMAS,
-                tool_choice="auto",
-                temperature=TEMPERATURE,
-                # Token guardrail: each call is capped at 800 tokens as requested.
-                max_tokens=MAX_TOKENS_PER_CALL,
-            )
+            try:
+                response = _create_chat_completion_with_token_compat(
+                    client=client,
+                    model=chosen_model,
+                    messages=messages,
+                )
+            except RuntimeError as exc:
+                # Human-readable failure path: return clean message instead of raw traceback.
+                LOGGER.error("%s", exc)
+                return str(exc)
 
             assistant_message = response.choices[0].message
             tool_calls = assistant_message.tool_calls or []
