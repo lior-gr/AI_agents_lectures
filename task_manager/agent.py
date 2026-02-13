@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 
 from openai import OpenAI
 
@@ -40,6 +41,33 @@ SYSTEM_PROMPT = (
     "Once the goal is satisfied, return a short final answer."
 )
 
+# Skill file location used only for prompt construction.
+SKILL_FILE = Path(__file__).resolve().parent / "skills" / "task_planning_skill.md"
+
+
+def load_task_planning_skill() -> str:
+    """Load task planning skill text from disk.
+
+    Separation note:
+    - This function only prepares prompt content.
+    - It does not alter loop flow, tool dispatch, or execution logic.
+    """
+    try:
+        return SKILL_FILE.read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        raise RuntimeError(f"Unable to load skill file: {SKILL_FILE}") from exc
+
+
+def build_system_prompt() -> str:
+    """Build the final system prompt by injecting skill guidance text.
+
+    Separation note:
+    - Prompt construction is isolated here.
+    - Agent control logic (steps/stops/tokens/tools) remains unchanged.
+    """
+    skill_text = load_task_planning_skill()
+    return f"{SYSTEM_PROMPT}\n\n[Task Planning Skill]\n{skill_text}"
+
 
 def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_MAX_STEPS) -> str:
     """Run a minimal agent loop for the given user goal."""
@@ -56,12 +84,13 @@ def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_M
     chosen_model = model or DEFAULT_MODEL
     mcp_client = MCPClient()
     mcp_client.start()
+    system_prompt = build_system_prompt()
 
     # Message history list: this is the full conversation state sent on every model call.
     messages: list[dict] = [
         {
             "role": "system",
-            "content": SYSTEM_PROMPT,
+            "content": system_prompt,
         },
         {"role": "user", "content": goal},
     ]
