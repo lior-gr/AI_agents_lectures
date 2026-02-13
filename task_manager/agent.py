@@ -7,7 +7,6 @@ Authentication note:
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 
@@ -104,10 +103,9 @@ def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_M
                     # Execution layer only: send tool calls through MCP transport.
                     # The agent remains unchanged as an orchestrator (loop/history/stop logic).
                     try:
-                        parsed_tool_args = json.loads(tool_args) if tool_args else {}
-                        if not isinstance(parsed_tool_args, dict):
-                            raise ValueError("tool arguments must decode to an object")
-                        tool_response = mcp_client.request(tool_name, parsed_tool_args)
+                        # Argument parsing/normalization is handled inside MCPClient,
+                        # so agent code stays focused on loop orchestration only.
+                        tool_response = mcp_client.request(tool_name, tool_args)
                         if tool_response.get("status") == "ok":
                             tool_result = str(tool_response.get("result", "OK"))
                         else:

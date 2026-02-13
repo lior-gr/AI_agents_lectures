@@ -261,3 +261,32 @@ When implementing mcp_server.py, add a short beginner section in comments that d
 3) that communication is inter-process stream I/O (not files, not HTTP).
 Also include one concrete end-to-end example showing one input line and one output line.
 ```
+
+## Issue 6: Tool-argument parsing ownership (agent vs client)
+1. Used prompt:
+```text
+Modify agent.py so that tool calls go through mcp_client.py instead of calling tools.py directly.
+Do not modify the agent loop structure.
+Only replace the execution layer.
+Add comments explaining why the agent remains unchanged.
+```
+1.1. Highlighted section that drove later clarifications:
+```text
+Do not modify the agent loop structure.
+Only replace the execution layer.
+```
+
+2. Following clarification request:
+```text
+explain more about the parsing of the tool json argument. where it is now, why it there now, and where do you want to move it to, and why
+```
+
+3. Improved prompt suggestion by Codex:
+```text
+Route execution through mcp_client.py and keep loop/stop/token/step logic unchanged.
+Also move JSON argument parsing out of agent.py into mcp_client.py so the agent remains orchestration-only.
+In comments, explicitly state:
+1) current source format from model (tool arguments are JSON strings),
+2) where conversion to dict happens,
+3) why parsing belongs to the client/protocol layer.
+```

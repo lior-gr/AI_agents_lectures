@@ -47,7 +47,35 @@ class MCPClient:
         except OSError as exc:
             raise RuntimeError(f"Failed to start MCP server: {exc}") from exc
 
-    def request(self, tool: str, arguments: dict | None = None) -> dict:
+    def _normalize_arguments(self, arguments: dict | str | None) -> tuple[dict | None, str | None]:
+        """Normalize tool arguments into a dictionary for transport.
+
+        Ownership note:
+        - The model provides tool arguments as JSON text.
+        - This client owns protocol adaptation, so JSON-string -> dict conversion happens here,
+          not in the agent loop.
+        """
+        if arguments is None:
+            return {}, None
+
+        if isinstance(arguments, dict):
+            return arguments, None
+
+        if isinstance(arguments, str):
+            text = arguments.strip()
+            if not text:
+                return {}, None
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError as exc:
+                return None, f"'arguments' JSON is invalid: {exc.msg}"
+            if not isinstance(parsed, dict):
+                return None, "'arguments' JSON must decode to an object"
+            return parsed, None
+
+        return None, "'arguments' must be a dictionary, JSON string, or None"
+
+    def request(self, tool: str, arguments: dict | str | None = None) -> dict:
         """Send one tool request and return one response dictionary.
 
         Error handling strategy:
@@ -57,11 +85,9 @@ class MCPClient:
         if not isinstance(tool, str) or not tool:
             return {"status": "error", "error": "'tool' must be a non-empty string"}
 
-        if arguments is None:
-            arguments = {}
-
-        if not isinstance(arguments, dict):
-            return {"status": "error", "error": "'arguments' must be a dictionary"}
+        arguments, arg_error = self._normalize_arguments(arguments)
+        if arg_error is not None:
+            return {"status": "error", "error": arg_error}
 
         if self._proc is None or self._proc.poll() is not None:
             return {"status": "error", "error": "Server is not running. Call start() first."}
