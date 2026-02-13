@@ -7,12 +7,14 @@ Authentication note:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 
 from openai import OpenAI
 
-from tools import TOOL_SCHEMAS, run_tool_call
+from mcp_client import MCPClient
+from tools import TOOL_SCHEMAS
 
 # Basic logger used to show progress for each step in the loop.
 LOGGER = logging.getLogger(__name__)
@@ -53,6 +55,8 @@ def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_M
     # API key source: this client uses OPENAI_API_KEY from environment by default.
     client = OpenAI()
     chosen_model = model or DEFAULT_MODEL
+    mcp_client = MCPClient()
+    mcp_client.start()
 
     # Message history list: this is the full conversation state sent on every model call.
     messages: list[dict] = [
@@ -64,68 +68,79 @@ def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_M
     ]
 
     # AGENT LOOP:
-    # This loop is the core control flow. It can run up to `max_steps` iterations.
-    for step in range(1, max_steps + 1):
-        LOGGER.info("Step %s/%s: requesting model response", step, max_steps)
+    # This loop is unchanged: same step control, history updates, and stopping conditions.
+    # Only the tool execution transport changed (direct call -> MCP client request).
+    try:
+        for step in range(1, max_steps + 1):
+            LOGGER.info("Step %s/%s: requesting model response", step, max_steps)
 
-        response = client.chat.completions.create(
-            model=chosen_model,
-            messages=messages,
-            # Tool schemas are defined in tools.py so the agent does not own task logic.
-            tools=TOOL_SCHEMAS,
-            tool_choice="auto",
-            temperature=TEMPERATURE,
-            # Token guardrail: each call is capped at 800 tokens as requested.
-            max_tokens=MAX_TOKENS_PER_CALL,
-        )
+            response = client.chat.completions.create(
+                model=chosen_model,
+                messages=messages,
+                # Tool schemas are defined in tools.py so the agent does not own task logic.
+                tools=TOOL_SCHEMAS,
+                tool_choice="auto",
+                temperature=TEMPERATURE,
+                # Token guardrail: each call is capped at 800 tokens as requested.
+                max_tokens=MAX_TOKENS_PER_CALL,
+            )
 
-        assistant_message = response.choices[0].message
-        tool_calls = assistant_message.tool_calls or []
-        assistant_text = assistant_message.content or ""
+            assistant_message = response.choices[0].message
+            tool_calls = assistant_message.tool_calls or []
+            assistant_text = assistant_message.content or ""
 
-        # Keep the assistant message in history exactly as returned so the next step has full context.
-        messages.append(assistant_message.model_dump(exclude_none=True))
+            # Keep the assistant message in history exactly as returned so the next step has full context.
+            messages.append(assistant_message.model_dump(exclude_none=True))
 
-        # TOOL CALL PROCESSING:
-        # If the assistant asks for tools, we execute stub handlers and append tool outputs.
-        if tool_calls:
-            LOGGER.info("Step %s: processing %s tool call(s)", step, len(tool_calls))
-            for call in tool_calls:
-                tool_name = call.function.name
-                tool_args = call.function.arguments or ""
-                LOGGER.info("Tool call id=%s name=%s", call.id, tool_name)
+            # TOOL CALL PROCESSING:
+            # If the assistant asks for tools, we execute stub handlers and append tool outputs.
+            if tool_calls:
+                LOGGER.info("Step %s: processing %s tool call(s)", step, len(tool_calls))
+                for call in tool_calls:
+                    tool_name = call.function.name
+                    tool_args = call.function.arguments or ""
+                    LOGGER.info("Tool call id=%s name=%s", call.id, tool_name)
 
-                # Tool execution is delegated to tools.py.
-                # The agent only orchestrates calls; it never edits JSON directly.
-                try:
-                    tool_result = run_tool_call(tool_name, tool_args)
-                except Exception as exc:  # pragma: no cover - defensive guard for runtime tool errors
-                    tool_result = f"Error executing tool '{tool_name}': {exc}"
+                    # Execution layer only: send tool calls through MCP transport.
+                    # The agent remains unchanged as an orchestrator (loop/history/stop logic).
+                    try:
+                        parsed_tool_args = json.loads(tool_args) if tool_args else {}
+                        if not isinstance(parsed_tool_args, dict):
+                            raise ValueError("tool arguments must decode to an object")
+                        tool_response = mcp_client.request(tool_name, parsed_tool_args)
+                        if tool_response.get("status") == "ok":
+                            tool_result = str(tool_response.get("result", "OK"))
+                        else:
+                            tool_result = str(tool_response.get("error", "Unknown tool error"))
+                    except Exception as exc:  # pragma: no cover - defensive guard for runtime tool errors
+                        tool_result = f"Error executing tool '{tool_name}': {exc}"
 
-                messages.append(
-                    {
-                        # This marks the message as tool output.
-                        "role": "tool",
-                        # Must match the tool call id generated by the model.
-                        "tool_call_id": call.id,
-                        # Tool name for readability/debugging.
-                        "name": tool_name,
-                        # The actual tool result sent back to the model.
-                        "content": tool_result,
-                    }
-                )
-            continue
+                    messages.append(
+                        {
+                            # This marks the message as tool output.
+                            "role": "tool",
+                            # Must match the tool call id generated by the model.
+                            "tool_call_id": call.id,
+                            # Tool name for readability/debugging.
+                            "name": tool_name,
+                            # The actual tool result sent back to the model.
+                            "content": tool_result,
+                        }
+                    )
+                continue
 
-        # STOPPING CONDITIONS:
-        # Condition 1: assistant returned a normal answer with no tool calls, so we can stop early.
-        if assistant_text.strip():
-            LOGGER.info("Stopping at step %s: final answer received", step)
-            return assistant_text
+            # STOPPING CONDITIONS:
+            # Condition 1: assistant returned a normal answer with no tool calls, so we can stop early.
+            if assistant_text.strip():
+                LOGGER.info("Stopping at step %s: final answer received", step)
+                return assistant_text
 
-        # Condition 2: no tool calls and empty output; stop to avoid useless iterations.
-        LOGGER.info("Stopping at step %s: empty response with no tool calls", step)
-        return "No final answer produced."
+            # Condition 2: no tool calls and empty output; stop to avoid useless iterations.
+            LOGGER.info("Stopping at step %s: empty response with no tool calls", step)
+            return "No final answer produced."
 
-    # Condition 3: hard cap reached (max_steps=5 by default).
-    LOGGER.info("Stopping: reached max_steps=%s", max_steps)
-    return f"Stopped after reaching max_steps={max_steps}."
+        # Condition 3: hard cap reached (max_steps=5 by default).
+        LOGGER.info("Stopping: reached max_steps=%s", max_steps)
+        return f"Stopped after reaching max_steps={max_steps}."
+    finally:
+        mcp_client.close()
