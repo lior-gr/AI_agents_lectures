@@ -11,18 +11,22 @@ from __future__ import annotations
 from typing import Callable
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot
-from PySide6.QtGui import QFontDatabase
+from PySide6.QtGui import QColor, QFontDatabase
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QComboBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
+    QStackedWidget,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -74,6 +78,26 @@ def _make_table_item(text: str) -> QTableWidgetItem:
     return QTableWidgetItem(text)
 
 
+def _event_background_color(event_type: str) -> QColor:
+    """Return a soft background color per event type for scan-friendly logs."""
+    palette = {
+        "agent_start": QColor("#E8F4FD"),
+        "skill_used": QColor("#EAF8EF"),
+        "step_start": QColor("#EEF3FF"),
+        "tool_called": QColor("#FFF7E0"),
+        "tool_result": QColor("#EAF8EF"),
+        "stop": QColor("#F3F4F6"),
+        "error": QColor("#FDECEC"),
+    }
+    return palette.get(event_type, QColor("#FFFFFF"))
+
+
+def _set_tree_item_background(item: QTreeWidgetItem, color: QColor) -> None:
+    """Apply the same background color to all columns in a tree row."""
+    for col in range(item.columnCount()):
+        item.setBackground(col, color)
+
+
 class UiController(QObject):
     """Main-thread controller for safe UI updates from worker signals."""
 
@@ -84,6 +108,11 @@ class UiController(QObject):
         submit_button: QPushButton,
         output_box: QTextEdit,
         progress_table: QTableWidget,
+        progress_tree: QTreeWidget,
+        progress_view_stack: QStackedWidget,
+        view_selector: QComboBox,
+        expand_button: QPushButton,
+        collapse_button: QPushButton,
     ) -> None:
         super().__init__()
         self._submit_goal = submit_goal
@@ -91,13 +120,46 @@ class UiController(QObject):
         self._submit_button = submit_button
         self._output_box = output_box
         self._progress_table = progress_table
+        self._progress_tree = progress_tree
+        self._progress_view_stack = progress_view_stack
+        self._view_selector = view_selector
+        self._expand_button = expand_button
+        self._collapse_button = collapse_button
         self._sequence = 0
+        self._session_root: QTreeWidgetItem | None = None
+        self._step_nodes: dict[int, QTreeWidgetItem] = {}
         self._thread: QThread | None = None
         self._worker: GoalWorker | None = None
+        self._reset_progress_views()
+        self.on_view_mode_changed(self._view_selector.currentText())
 
     def _set_busy(self, is_busy: bool) -> None:
         self._submit_button.setEnabled(not is_busy)
         self._goal_input.setEnabled(not is_busy)
+
+    def _reset_progress_views(self) -> None:
+        """Clear both progress views and recreate deterministic tree roots."""
+        self._progress_table.setRowCount(0)
+        self._progress_tree.clear()
+        self._step_nodes.clear()
+
+        # Root grouping helps collapse/expand entire run quickly.
+        self._session_root = QTreeWidgetItem(["", "", "session", "Run", ""])
+        self._progress_tree.addTopLevelItem(self._session_root)
+        self._session_root.setExpanded(True)
+
+    def _get_step_node(self, step: int) -> QTreeWidgetItem:
+        """Return existing step node or create one in first-seen order."""
+        if step in self._step_nodes:
+            return self._step_nodes[step]
+
+        parent = self._session_root or self._progress_tree.invisibleRootItem()
+        step_item = QTreeWidgetItem(["", "", "step", f"Step {step}", ""])
+        parent.addChild(step_item)
+        step_item.setExpanded(True)
+        _set_tree_item_background(step_item, _event_background_color("step_start"))
+        self._step_nodes[step] = step_item
+        return step_item
 
     def _start_worker(self, goal: str) -> None:
         """Start backend call in a worker thread so UI remains responsive."""
@@ -130,15 +192,23 @@ class UiController(QObject):
         step = event.get("step")
         if step is not None:
             details = f"step={step} | {details}" if details else f"step={step}"
+        color = _event_background_color(event_type)
 
         row = self._progress_table.rowCount()
         self._progress_table.insertRow(row)
-        self._progress_table.setItem(row, 0, _make_table_item(sequence))
-        self._progress_table.setItem(row, 1, _make_table_item(timestamp))
-        self._progress_table.setItem(row, 2, _make_table_item(event_type))
-        self._progress_table.setItem(row, 3, _make_table_item(name))
-        self._progress_table.setItem(row, 4, _make_table_item(details))
+        for col, value in enumerate([sequence, timestamp, event_type, name, details]):
+            item = _make_table_item(value)
+            item.setBackground(color)
+            self._progress_table.setItem(row, col, item)
         self._progress_table.scrollToBottom()
+
+        parent = self._session_root or self._progress_tree.invisibleRootItem()
+        if isinstance(step, int):
+            parent = self._get_step_node(step)
+        tree_item = QTreeWidgetItem([sequence, timestamp, event_type, name, details])
+        parent.addChild(tree_item)
+        _set_tree_item_background(tree_item, color)
+        self._progress_tree.scrollToItem(tree_item)
 
     @Slot(str)
     def on_worker_completed(self, result: str) -> None:
@@ -162,7 +232,7 @@ class UiController(QObject):
 
         goal = self._goal_input.text().strip()
         self._output_box.clear()
-        self._progress_table.setRowCount(0)
+        self._reset_progress_views()
         self._sequence = 0
 
         if not goal:
@@ -171,6 +241,22 @@ class UiController(QObject):
 
         self._set_busy(True)
         self._start_worker(goal)
+
+    @Slot(str)
+    def on_view_mode_changed(self, mode: str) -> None:
+        """Switch between flat table and collapsible tree progress views."""
+        is_tree = mode.lower() == "tree"
+        self._progress_view_stack.setCurrentIndex(1 if is_tree else 0)
+        self._expand_button.setEnabled(is_tree)
+        self._collapse_button.setEnabled(is_tree)
+
+    @Slot()
+    def on_expand_tree(self) -> None:
+        self._progress_tree.expandAll()
+
+    @Slot()
+    def on_collapse_tree(self) -> None:
+        self._progress_tree.collapseAll()
 
 
 def create_window(submit_goal: Callable[..., str]) -> QtWindowRunner:
@@ -221,8 +307,19 @@ def create_window(submit_goal: Callable[..., str]) -> QtWindowRunner:
     right_panel.setLayout(right_layout)
     splitter.addWidget(right_panel)
 
+    progress_header_row = QHBoxLayout()
     progress_label = QLabel("Agent Progress")
-    right_layout.addWidget(progress_label)
+    progress_header_row.addWidget(progress_label)
+    progress_header_row.addStretch()
+    progress_header_row.addWidget(QLabel("View"))
+    view_selector = QComboBox()
+    view_selector.addItems(["Table", "Tree"])
+    progress_header_row.addWidget(view_selector)
+    expand_button = QPushButton("Expand")
+    collapse_button = QPushButton("Collapse")
+    progress_header_row.addWidget(expand_button)
+    progress_header_row.addWidget(collapse_button)
+    right_layout.addLayout(progress_header_row)
 
     progress_table = QTableWidget(0, 5)
     progress_table.setHorizontalHeaderLabels(["#", "Time", "Type", "Name", "Details"])
@@ -234,7 +331,21 @@ def create_window(submit_goal: Callable[..., str]) -> QtWindowRunner:
     progress_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
     progress_table.setSelectionBehavior(QAbstractItemView.SelectRows)
     progress_table.setSelectionMode(QAbstractItemView.SingleSelection)
-    right_layout.addWidget(progress_table)
+
+    progress_tree = QTreeWidget()
+    progress_tree.setColumnCount(5)
+    progress_tree.setHeaderLabels(["#", "Time", "Type", "Name", "Details"])
+    progress_tree.header().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+    progress_tree.header().setSectionResizeMode(1, QHeaderView.ResizeToContents)
+    progress_tree.header().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+    progress_tree.header().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+    progress_tree.header().setSectionResizeMode(4, QHeaderView.Stretch)
+    progress_tree.setUniformRowHeights(True)
+
+    progress_view_stack = QStackedWidget()
+    progress_view_stack.addWidget(progress_table)
+    progress_view_stack.addWidget(progress_tree)
+    right_layout.addWidget(progress_view_stack)
 
     splitter.setSizes([700, 400])
 
@@ -242,6 +353,7 @@ def create_window(submit_goal: Callable[..., str]) -> QtWindowRunner:
     fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
     output_box.setFont(fixed_font)
     progress_table.setFont(fixed_font)
+    progress_tree.setFont(fixed_font)
 
     controller = UiController(
         submit_goal=submit_goal,
@@ -249,10 +361,18 @@ def create_window(submit_goal: Callable[..., str]) -> QtWindowRunner:
         submit_button=submit_button,
         output_box=output_box,
         progress_table=progress_table,
+        progress_tree=progress_tree,
+        progress_view_stack=progress_view_stack,
+        view_selector=view_selector,
+        expand_button=expand_button,
+        collapse_button=collapse_button,
     )
 
     submit_button.clicked.connect(controller.on_submit)
     goal_input.returnPressed.connect(controller.on_submit)
+    view_selector.currentTextChanged.connect(controller.on_view_mode_changed)
+    expand_button.clicked.connect(controller.on_expand_tree)
+    collapse_button.clicked.connect(controller.on_collapse_tree)
 
     # Keep controller alive for the full window lifetime.
     window._controller = controller  # type: ignore[attr-defined]
