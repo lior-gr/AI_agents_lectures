@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from typing import Callable
 
 from storage import add_task, list_tasks, mark_done
 
@@ -40,12 +41,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_goal(goal: str) -> str:
+def run_goal(goal: str, on_event: Callable[[dict], None] | None = None) -> str:
     """Run goal mode and return text output for callers like CLI or UI.
 
     Separation of concerns:
     - UI code should call this function and display returned text.
     - OpenAI/agent logic stays in `agent.py`, not in the UI layer.
+    - Optional `on_event` is instrumentation-only and does not affect execution flow.
     """
     if not goal.strip():
         return "Please enter a non-empty goal."
@@ -57,7 +59,7 @@ def run_goal(goal: str) -> str:
         return f"Agent mode unavailable: missing dependency ({exc})."
 
     try:
-        result = run_agent(goal)
+        result = run_agent(goal, on_event=on_event)
     except Exception as exc:
         return f"Agent execution failed: {exc}"
 
