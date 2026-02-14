@@ -82,6 +82,7 @@ def _event_background_color(event_type: str) -> QColor:
     """Return a soft background color per event type for scan-friendly logs."""
     palette = {
         "agent_start": QColor("#E8F4FD"),
+        "skill_route": QColor("#FFE8CC"),
         "skill_used": QColor("#EAF8EF"),
         "step_start": QColor("#EEF3FF"),
         "tool_called": QColor("#FFF7E0"),
@@ -113,6 +114,7 @@ class UiController(QObject):
         view_selector: QComboBox,
         expand_button: QPushButton,
         collapse_button: QPushButton,
+        copy_button: QPushButton,
     ) -> None:
         super().__init__()
         self._submit_goal = submit_goal
@@ -125,8 +127,11 @@ class UiController(QObject):
         self._view_selector = view_selector
         self._expand_button = expand_button
         self._collapse_button = collapse_button
+        self._copy_button = copy_button
         self._sequence = 0
+        self._progress_rows: list[tuple[str, str, str, str, str]] = []
         self._session_root: QTreeWidgetItem | None = None
+        self._skill_route_node: QTreeWidgetItem | None = None
         self._step_nodes: dict[int, QTreeWidgetItem] = {}
         self._thread: QThread | None = None
         self._worker: GoalWorker | None = None
@@ -141,6 +146,8 @@ class UiController(QObject):
         """Clear both progress views and recreate deterministic tree roots."""
         self._progress_table.setRowCount(0)
         self._progress_tree.clear()
+        self._progress_rows.clear()
+        self._skill_route_node = None
         self._step_nodes.clear()
 
         # Root grouping helps collapse/expand entire run quickly.
@@ -193,10 +200,12 @@ class UiController(QObject):
         if step is not None:
             details = f"step={step} | {details}" if details else f"step={step}"
         color = _event_background_color(event_type)
+        row_values = (sequence, timestamp, event_type, name, details)
+        self._progress_rows.append(row_values)
 
         row = self._progress_table.rowCount()
         self._progress_table.insertRow(row)
-        for col, value in enumerate([sequence, timestamp, event_type, name, details]):
+        for col, value in enumerate(row_values):
             item = _make_table_item(value)
             item.setBackground(color)
             self._progress_table.setItem(row, col, item)
@@ -205,10 +214,40 @@ class UiController(QObject):
         parent = self._session_root or self._progress_tree.invisibleRootItem()
         if isinstance(step, int):
             parent = self._get_step_node(step)
+        elif event_type == "skill_route":
+            # Keep a dedicated routing stage node so selected skills can be nested under it.
+            self._skill_route_node = QTreeWidgetItem([sequence, timestamp, event_type, name, details])
+            parent.addChild(self._skill_route_node)
+            _set_tree_item_background(self._skill_route_node, color)
+            self._skill_route_node.setExpanded(True)
+            self._progress_tree.scrollToItem(self._skill_route_node)
+            return
+        elif event_type == "skill_used" and self._skill_route_node is not None:
+            parent = self._skill_route_node
+
         tree_item = QTreeWidgetItem([sequence, timestamp, event_type, name, details])
         parent.addChild(tree_item)
         _set_tree_item_background(tree_item, color)
         self._progress_tree.scrollToItem(tree_item)
+
+    def _build_progress_report_text(self) -> str:
+        """Build a deterministic plain-text report for clipboard export."""
+        headers = ("#", "Time", "Type", "Name", "Details")
+        rows = [headers, *self._progress_rows]
+        widths = [0, 0, 0, 0, 0]
+        for row in rows:
+            for idx, cell in enumerate(row):
+                widths[idx] = max(widths[idx], len(cell))
+
+        def fmt(row: tuple[str, str, str, str, str]) -> str:
+            return " | ".join(cell.ljust(widths[idx]) for idx, cell in enumerate(row))
+
+        header_line = fmt(headers)
+        divider = "-+-".join("-" * width for width in widths)
+        body = [fmt(row) for row in self._progress_rows]
+        if not body:
+            body = ["(no progress events yet)"]
+        return "\n".join([header_line, divider, *body])
 
     @Slot(str)
     def on_worker_completed(self, result: str) -> None:
@@ -257,6 +296,14 @@ class UiController(QObject):
     @Slot()
     def on_collapse_tree(self) -> None:
         self._progress_tree.collapseAll()
+
+    @Slot()
+    def on_copy_progress(self) -> None:
+        """Copy the full progress report to clipboard."""
+        report_text = self._build_progress_report_text()
+        clipboard = QApplication.clipboard()
+        clipboard.setText(report_text)
+        self._output_box.append("\n[info] Progress report copied to clipboard.")
 
 
 def create_window(submit_goal: Callable[..., str]) -> QtWindowRunner:
@@ -317,8 +364,10 @@ def create_window(submit_goal: Callable[..., str]) -> QtWindowRunner:
     progress_header_row.addWidget(view_selector)
     expand_button = QPushButton("Expand")
     collapse_button = QPushButton("Collapse")
+    copy_button = QPushButton("Copy Progress")
     progress_header_row.addWidget(expand_button)
     progress_header_row.addWidget(collapse_button)
+    progress_header_row.addWidget(copy_button)
     right_layout.addLayout(progress_header_row)
 
     progress_table = QTableWidget(0, 5)
@@ -366,6 +415,7 @@ def create_window(submit_goal: Callable[..., str]) -> QtWindowRunner:
         view_selector=view_selector,
         expand_button=expand_button,
         collapse_button=collapse_button,
+        copy_button=copy_button,
     )
 
     submit_button.clicked.connect(controller.on_submit)
@@ -373,6 +423,7 @@ def create_window(submit_goal: Callable[..., str]) -> QtWindowRunner:
     view_selector.currentTextChanged.connect(controller.on_view_mode_changed)
     expand_button.clicked.connect(controller.on_expand_tree)
     collapse_button.clicked.connect(controller.on_collapse_tree)
+    copy_button.clicked.connect(controller.on_copy_progress)
 
     # Keep controller alive for the full window lifetime.
     window._controller = controller  # type: ignore[attr-defined]

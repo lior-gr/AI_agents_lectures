@@ -8,6 +8,7 @@ Authentication note:
 from __future__ import annotations
 
 from datetime import datetime
+from functools import partial
 import logging
 import os
 from pathlib import Path
@@ -16,6 +17,7 @@ from typing import Callable
 from openai import OpenAI
 
 from mcp_client import MCPClient
+from skill_router import ALLOWED_SKILLS, route_skills_with_model
 from tools import TOOL_SCHEMAS
 
 # Basic logger used to show progress for each step in the loop.
@@ -33,6 +35,11 @@ MAX_COMPLETION_TOKENS_PER_CALL = 800
 # Use a low temperature for more deterministic outputs.
 TEMPERATURE = 0.2
 
+# Router path uses an even lower temperature and smaller token cap to stay cheap.
+ROUTER_TEMPERATURE = 0.0
+ROUTER_MAX_COMPLETION_TOKENS = 120
+ROUTER_MAX_ATTEMPTS = 3
+
 # Keep agent behavior intentionally simple: execute tools to satisfy the goal, then stop.
 SYSTEM_PROMPT = (
     "You are a minimal task agent. "
@@ -45,6 +52,12 @@ SYSTEM_PROMPT = (
 
 # Skill files are prompt-only guidance and live under this directory.
 SKILLS_DIR = Path(__file__).resolve().parent / "skills"
+SKILL_FILES: dict[str, Path] = {
+    "always_on": SKILLS_DIR / "always_on.md",
+    "task_planning": SKILLS_DIR / "task_planning.md",
+    "status_reporting": SKILLS_DIR / "status_reporting.md",
+    "output_format": SKILLS_DIR / "output_format.md",
+}
 
 
 def _read_skill_file(path: Path) -> str:
@@ -55,90 +68,101 @@ def _read_skill_file(path: Path) -> str:
         raise RuntimeError(f"Unable to load skill file: {path}") from exc
 
 
-def _skill_routes_for_goal(goal: str) -> list[tuple[str, Path]]:
-    """Choose skill files with deterministic keyword rules.
+def _create_router_completion_with_token_compat(client: OpenAI, model: str, messages: list[dict]):
+    """Create router completion with token-parameter compatibility fallback."""
+    token_param_candidates = ["max_completion_tokens", "max_tokens"]
 
-    Deterministic routing means:
-    - Fixed rule list order (top to bottom).
-    - Simple case-insensitive keyword checks.
-    - No model inference/randomness in skill selection.
+    for idx, token_param in enumerate(token_param_candidates):
+        try:
+            return client.chat.completions.create(
+                model=model,
+                messages=messages,
+                temperature=ROUTER_TEMPERATURE,
+                **{token_param: ROUTER_MAX_COMPLETION_TOKENS},
+            )
+        except Exception as exc:
+            is_last_attempt = idx == len(token_param_candidates) - 1
+            if _is_unsupported_token_param_error(exc, token_param) and not is_last_attempt:
+                LOGGER.warning(
+                    "Router model '%s' rejected token parameter '%s'. Retrying with '%s'.",
+                    model,
+                    token_param,
+                    token_param_candidates[idx + 1],
+                )
+                continue
+            raise RuntimeError(_format_openai_error_message(exc, model)) from exc
+
+    raise RuntimeError(f"OpenAI request failed for router model '{model}'.")
+
+
+def call_router_model(
+    prompt_or_messages: str | list[dict],
+    *,
+    client: OpenAI | None = None,
+    model: str | None = None,
+) -> str:
+    """Return raw router text output only.
+
+    Router calls must stay cheap because routing is control-plane work, not
+    final user-facing reasoning work.
     """
-    goal_lower = goal.lower()
-    selected: list[tuple[str, Path]] = [("always_on", SKILLS_DIR / "always_on.md")]
-
-    # Ordered rules: skill order in prompt is stable for identical input.
-    rules: list[tuple[str, tuple[str, ...], Path]] = [
-        (
-            "task_planning",
-            (
-                "plan",
-                "organize",
-                "break down",
-                "subtask",
-                "deadline",
-                "priority",
-                "schedule",
-                "sequence",
-            ),
-            SKILLS_DIR / "task_planning.md",
-        ),
-        (
-            "status_reporting",
-            (
-                "status",
-                "progress",
-                "update",
-                "checkpoint",
-                "where are we",
-                "current state",
-            ),
-            SKILLS_DIR / "status_reporting.md",
-        ),
-        (
-            "output_format",
-            (
-                "format",
-                "table",
-                "json",
-                "markdown",
-                "bullet",
-                "structured",
-                "template",
-            ),
-            SKILLS_DIR / "output_format.md",
-        ),
-    ]
-
-    for skill_name, keywords, skill_path in rules:
-        if any(keyword in goal_lower for keyword in keywords):
-            selected.append((skill_name, skill_path))
-
-    return selected
+    active_client = client or OpenAI()
+    active_model = model or DEFAULT_MODEL
+    if isinstance(prompt_or_messages, str):
+        messages = [
+            {"role": "system", "content": "You are a strict JSON router. Return JSON only."},
+            {"role": "user", "content": prompt_or_messages},
+        ]
+    else:
+        messages = prompt_or_messages
+    response = _create_router_completion_with_token_compat(active_client, active_model, messages)
+    return response.choices[0].message.content or ""
 
 
-def load_skills(goal: str) -> str:
-    """Load and concatenate skills for the current goal.
+def _route_skill_names(goal: str, *, client: OpenAI, model: str) -> tuple[list[str], str]:
+    """Route skills with bounded model retries and deterministic validation.
 
-    Ordering is intentional:
-    - `always_on.md` is always first for baseline constraints.
-    - Conditional skills follow a fixed deterministic rule order.
+    Routing affects reasoning style only; it does not change loop/tool behavior.
     """
+    # Bind client/model once so route_skills_with_model can call a single-arg router function.
+    routed_call = partial(call_router_model, client=client, model=model)
+    ok, routed_skills, reason = route_skills_with_model(goal, routed_call, max_attempts=3)
+
+    # Always load baseline guardrails even if router fails.
+    always_on_only = ["always_on"]
+    if not ok:
+        return always_on_only, f"router_fail_fallback: {reason}"
+
+    # Router output controls optional reasoning skills only.
+    optional_skills = [skill for skill in routed_skills if skill != "always_on"]
+    allowed_order = list(ALLOWED_SKILLS.keys())
+    ordered_optional = [skill for skill in allowed_order if skill in optional_skills]
+    return always_on_only + ordered_optional, reason
+
+
+def load_skills(goal: str, *, client: OpenAI, model: str) -> tuple[str, list[str], str]:
+    """Load routed skills and return concatenated text plus route metadata."""
+    selected_skills, route_reason = _route_skill_names(goal, client=client, model=model)
     sections: list[str] = []
-    for skill_name, skill_path in _skill_routes_for_goal(goal):
+    for skill_name in selected_skills:
+        skill_path = SKILL_FILES.get(skill_name)
+        if skill_path is None:
+            raise RuntimeError(f"Missing skill file mapping for '{skill_name}'.")
         skill_text = _read_skill_file(skill_path)
         sections.append(f"[Skill: {skill_name}]\n{skill_text}")
-    return "\n\n".join(sections)
+    return "\n\n---\n\n".join(sections), selected_skills, route_reason
 
 
-def build_system_prompt(goal: str) -> str:
+def build_system_prompt(goal: str, *, client: OpenAI, model: str) -> tuple[str, list[str], str]:
     """Build final system prompt by injecting routed skill text.
 
     Separation note:
     - This function only constructs prompt text.
+    - Skill routing changes reasoning guidance only.
     - Agent loop, stop conditions, token handling, and tool execution stay unchanged.
     """
-    skill_text = load_skills(goal)
-    return f"{SYSTEM_PROMPT}\n\n[Loaded Skills]\n{skill_text}"
+    skill_text, selected_skills, route_reason = load_skills(goal, client=client, model=model)
+    return f"{SYSTEM_PROMPT}\n\n[Loaded Skills]\n{skill_text}", selected_skills, route_reason
 
 
 def _is_unsupported_token_param_error(exc: Exception, param_name: str) -> bool:
@@ -242,11 +266,22 @@ def run_agent(
     # API key source: this client uses OPENAI_API_KEY from environment by default.
     client = OpenAI()
     chosen_model = model or DEFAULT_MODEL
+    try:
+        system_prompt, selected_skills, route_reason = build_system_prompt(
+            goal,
+            client=client,
+            model=chosen_model,
+        )
+    except RuntimeError as exc:
+        LOGGER.error("%s", exc)
+        _emit_event(on_event, "error", "skill_routing", str(exc))
+        return str(exc)
+
     mcp_client = MCPClient()
     mcp_client.start()
-    system_prompt = build_system_prompt(goal)
     _emit_event(on_event, "agent_start", "run_agent", f"model={chosen_model}")
-    for skill_name, _ in _skill_routes_for_goal(goal):
+    _emit_event(on_event, "skill_route", "model_router", route_reason)
+    for skill_name in selected_skills:
         _emit_event(on_event, "skill_used", skill_name, "Injected into system prompt.")
 
     # Message history list: this is the full conversation state sent on every model call.
