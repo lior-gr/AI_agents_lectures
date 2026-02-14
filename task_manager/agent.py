@@ -25,7 +25,7 @@ LOGGER = logging.getLogger(__name__)
 DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 # Hard step limit requested for this minimal agent.
-DEFAULT_MAX_STEPS = 5
+DEFAULT_MAX_STEPS = 15
 
 # Per-call completion token cap requested in the prompt.
 MAX_COMPLETION_TOKENS_PER_CALL = 800
@@ -43,32 +43,102 @@ SYSTEM_PROMPT = (
     "Once the goal is satisfied, return a short final answer."
 )
 
-# Skill file location used only for prompt construction.
-SKILL_FILE = Path(__file__).resolve().parent / "skills" / "task_planning_skill.md"
+# Skill files are prompt-only guidance and live under this directory.
+SKILLS_DIR = Path(__file__).resolve().parent / "skills"
 
 
-def load_task_planning_skill() -> str:
-    """Load task planning skill text from disk.
-
-    Separation note:
-    - This function only prepares prompt content.
-    - It does not alter loop flow, tool dispatch, or execution logic.
-    """
+def _read_skill_file(path: Path) -> str:
+    """Read one skill file from disk and return normalized text."""
     try:
-        return SKILL_FILE.read_text(encoding="utf-8").strip()
+        return path.read_text(encoding="utf-8").strip()
     except OSError as exc:
-        raise RuntimeError(f"Unable to load skill file: {SKILL_FILE}") from exc
+        raise RuntimeError(f"Unable to load skill file: {path}") from exc
 
 
-def build_system_prompt() -> str:
-    """Build the final system prompt by injecting skill guidance text.
+def _skill_routes_for_goal(goal: str) -> list[tuple[str, Path]]:
+    """Choose skill files with deterministic keyword rules.
+
+    Deterministic routing means:
+    - Fixed rule list order (top to bottom).
+    - Simple case-insensitive keyword checks.
+    - No model inference/randomness in skill selection.
+    """
+    goal_lower = goal.lower()
+    selected: list[tuple[str, Path]] = [("always_on", SKILLS_DIR / "always_on.md")]
+
+    # Ordered rules: skill order in prompt is stable for identical input.
+    rules: list[tuple[str, tuple[str, ...], Path]] = [
+        (
+            "task_planning",
+            (
+                "plan",
+                "organize",
+                "break down",
+                "subtask",
+                "deadline",
+                "priority",
+                "schedule",
+                "sequence",
+            ),
+            SKILLS_DIR / "task_planning.md",
+        ),
+        (
+            "status_reporting",
+            (
+                "status",
+                "progress",
+                "update",
+                "checkpoint",
+                "where are we",
+                "current state",
+            ),
+            SKILLS_DIR / "status_reporting.md",
+        ),
+        (
+            "output_format",
+            (
+                "format",
+                "table",
+                "json",
+                "markdown",
+                "bullet",
+                "structured",
+                "template",
+            ),
+            SKILLS_DIR / "output_format.md",
+        ),
+    ]
+
+    for skill_name, keywords, skill_path in rules:
+        if any(keyword in goal_lower for keyword in keywords):
+            selected.append((skill_name, skill_path))
+
+    return selected
+
+
+def load_skills(goal: str) -> str:
+    """Load and concatenate skills for the current goal.
+
+    Ordering is intentional:
+    - `always_on.md` is always first for baseline constraints.
+    - Conditional skills follow a fixed deterministic rule order.
+    """
+    sections: list[str] = []
+    for skill_name, skill_path in _skill_routes_for_goal(goal):
+        skill_text = _read_skill_file(skill_path)
+        sections.append(f"[Skill: {skill_name}]\n{skill_text}")
+    return "\n\n".join(sections)
+
+
+def build_system_prompt(goal: str) -> str:
+    """Build final system prompt by injecting routed skill text.
 
     Separation note:
-    - Prompt construction is isolated here.
-    - Agent control logic (steps/stops/tokens/tools) remains unchanged.
+    - This function only constructs prompt text.
+    - Agent loop, stop conditions, token handling, and tool execution stay unchanged.
     """
-    skill_text = load_task_planning_skill()
-    return f"{SYSTEM_PROMPT}\n\n[Task Planning Skill]\n{skill_text}"
+    skill_text = load_skills(goal)
+    return f"{SYSTEM_PROMPT}\n\n[Loaded Skills]\n{skill_text}"
 
 
 def _is_unsupported_token_param_error(exc: Exception, param_name: str) -> bool:
@@ -174,14 +244,10 @@ def run_agent(
     chosen_model = model or DEFAULT_MODEL
     mcp_client = MCPClient()
     mcp_client.start()
-    system_prompt = build_system_prompt()
+    system_prompt = build_system_prompt(goal)
     _emit_event(on_event, "agent_start", "run_agent", f"model={chosen_model}")
-    _emit_event(
-        on_event,
-        "skill_used",
-        "task_planning_skill",
-        "Injected into system prompt.",
-    )
+    for skill_name, _ in _skill_routes_for_goal(goal):
+        _emit_event(on_event, "skill_used", skill_name, "Injected into system prompt.")
 
     # Message history list: this is the full conversation state sent on every model call.
     messages: list[dict] = [
