@@ -7,9 +7,11 @@ Authentication note:
 
 from __future__ import annotations
 
+from datetime import datetime
 import logging
 import os
 from pathlib import Path
+from typing import Callable
 
 from openai import OpenAI
 
@@ -85,6 +87,36 @@ def _format_openai_error_message(exc: Exception, model: str) -> str:
     )
 
 
+def _emit_event(
+    on_event: Callable[[dict], None] | None,
+    event_type: str,
+    name: str = "",
+    details: str = "",
+    step: int | None = None,
+) -> None:
+    """Emit one instrumentation event to observers.
+
+    This function is observability-only. Any callback failure is swallowed so
+    agent control flow is never affected by UI/telemetry logic.
+    """
+    if on_event is None:
+        return
+
+    payload = {
+        "timestamp": datetime.now().strftime("%H:%M:%S"),
+        "type": event_type,
+        "name": name,
+        "details": details,
+    }
+    if step is not None:
+        payload["step"] = step
+
+    try:
+        on_event(payload)
+    except Exception as exc:  # pragma: no cover - defensive guard
+        LOGGER.debug("Ignoring on_event callback failure: %s", exc)
+
+
 def _create_chat_completion_with_token_compat(client: OpenAI, model: str, messages: list[dict]):
     """Create chat completion with compatibility fallback for token-limit parameter names.
 
@@ -121,7 +153,13 @@ def _create_chat_completion_with_token_compat(client: OpenAI, model: str, messag
     raise RuntimeError(f"OpenAI request failed for model '{model}'.")
 
 
-def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_MAX_STEPS) -> str:
+def run_agent(
+    goal: str,
+    *,
+    model: str | None = None,
+    max_steps: int = DEFAULT_MAX_STEPS,
+    on_event: Callable[[dict], None] | None = None,
+) -> str:
     """Run a minimal agent loop for the given user goal."""
     if not goal.strip():
         raise ValueError("goal must be a non-empty string")
@@ -137,6 +175,13 @@ def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_M
     mcp_client = MCPClient()
     mcp_client.start()
     system_prompt = build_system_prompt()
+    _emit_event(on_event, "agent_start", "run_agent", f"model={chosen_model}")
+    _emit_event(
+        on_event,
+        "skill_used",
+        "task_planning_skill",
+        "Injected into system prompt.",
+    )
 
     # Message history list: this is the full conversation state sent on every model call.
     messages: list[dict] = [
@@ -153,6 +198,7 @@ def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_M
     try:
         for step in range(1, max_steps + 1):
             LOGGER.info("Step %s/%s: requesting model response", step, max_steps)
+            _emit_event(on_event, "step_start", f"step_{step}", f"{step}/{max_steps}", step=step)
 
             try:
                 response = _create_chat_completion_with_token_compat(
@@ -163,6 +209,7 @@ def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_M
             except RuntimeError as exc:
                 # Human-readable failure path: return clean message instead of raw traceback.
                 LOGGER.error("%s", exc)
+                _emit_event(on_event, "error", "openai_request", str(exc), step=step)
                 return str(exc)
 
             assistant_message = response.choices[0].message
@@ -180,6 +227,7 @@ def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_M
                     tool_name = call.function.name
                     tool_args = call.function.arguments or ""
                     LOGGER.info("Tool call id=%s name=%s", call.id, tool_name)
+                    _emit_event(on_event, "tool_called", tool_name, tool_args, step=step)
 
                     # Execution layer only: send tool calls through MCP transport.
                     # The agent remains unchanged as an orchestrator (loop/history/stop logic).
@@ -189,10 +237,13 @@ def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_M
                         tool_response = mcp_client.request(tool_name, tool_args)
                         if tool_response.get("status") == "ok":
                             tool_result = str(tool_response.get("result", "OK"))
+                            _emit_event(on_event, "tool_result", tool_name, tool_result, step=step)
                         else:
                             tool_result = str(tool_response.get("error", "Unknown tool error"))
+                            _emit_event(on_event, "tool_result", tool_name, tool_result, step=step)
                     except Exception as exc:  # pragma: no cover - defensive guard for runtime tool errors
                         tool_result = f"Error executing tool '{tool_name}': {exc}"
+                        _emit_event(on_event, "tool_result", tool_name, tool_result, step=step)
 
                     messages.append(
                         {
@@ -212,14 +263,17 @@ def run_agent(goal: str, *, model: str | None = None, max_steps: int = DEFAULT_M
             # Condition 1: assistant returned a normal answer with no tool calls, so we can stop early.
             if assistant_text.strip():
                 LOGGER.info("Stopping at step %s: final answer received", step)
+                _emit_event(on_event, "stop", "final_answer", "Final answer produced.", step=step)
                 return assistant_text
 
             # Condition 2: no tool calls and empty output; stop to avoid useless iterations.
             LOGGER.info("Stopping at step %s: empty response with no tool calls", step)
+            _emit_event(on_event, "stop", "empty_response", "No tool calls and empty assistant output.", step=step)
             return "No final answer produced."
 
         # Condition 3: hard cap reached (max_steps=5 by default).
         LOGGER.info("Stopping: reached max_steps=%s", max_steps)
+        _emit_event(on_event, "stop", "max_steps", f"Reached max_steps={max_steps}.", step=max_steps)
         return f"Stopped after reaching max_steps={max_steps}."
     finally:
         mcp_client.close()
