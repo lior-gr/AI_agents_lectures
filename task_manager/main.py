@@ -11,6 +11,12 @@ from storage import add_task, list_tasks, mark_done
 def build_parser() -> argparse.ArgumentParser:
     """Define CLI arguments and subcommands."""
     parser = argparse.ArgumentParser(description="Minimal task manager CLI")
+    # Optional GUI mode: launches the desktop UI while reusing backend functions in this module.
+    parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Launch desktop UI mode",
+    )
     # Optional goal mode: routes execution to the agent layer.
     parser.add_argument(
         "--goal",
@@ -34,24 +40,65 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def run_goal(goal: str) -> str:
+    """Run goal mode and return text output for callers like CLI or UI.
+
+    Separation of concerns:
+    - UI code should call this function and display returned text.
+    - OpenAI/agent logic stays in `agent.py`, not in the UI layer.
+    """
+    if not goal.strip():
+        return "Please enter a non-empty goal."
+
+    try:
+        # Lazy import keeps deterministic commands working without OpenAI dependencies.
+        from agent import run_agent
+    except ModuleNotFoundError as exc:
+        return f"Agent mode unavailable: missing dependency ({exc})."
+
+    try:
+        result = run_agent(goal)
+    except Exception as exc:
+        return f"Agent execution failed: {exc}"
+
+    return result or "No result returned."
+
+
+def launch_gui() -> None:
+    """Launch GUI mode.
+
+    CLI and GUI share the same backend (`run_goal`) so behavior stays consistent
+    and logic is not duplicated across interfaces.
+    """
+    # Lazy import avoids GUI dependency loading unless user explicitly asks for it.
+    from ui import create_window
+
+    # Inject shared backend function so UI does not import this module directly.
+    app = create_window(run_goal)
+    app.mainloop()
+
+
 # Parse command input and call the requested task operation.
 def main() -> None:
     """Parse command-line args and dispatch to storage actions."""
     parser = build_parser()
     args = parser.parse_args()
 
+    if args.gui and args.goal:
+        parser.error("Use either --gui or --goal, not both.")
+
+    if args.gui and args.command:
+        parser.error("Use either --gui or a subcommand (add/list/done), not both.")
+
     if args.goal and args.command:
         parser.error("Use either --goal or a subcommand (add/list/done), not both.")
 
-    if args.goal:
-        try:
-            # Lazy import keeps deterministic commands working without OpenAI dependencies.
-            from agent import run_agent
-        except ModuleNotFoundError as exc:
-            print(f"Agent mode unavailable: missing dependency ({exc}).")
-            return
+    if args.gui:
+        launch_gui()
+        return
 
-        result = run_agent(args.goal)
+    if args.goal:
+        result = run_goal(args.goal)
         if result:
             print(result)
         return
@@ -63,7 +110,7 @@ def main() -> None:
     elif args.command == "done":
         mark_done(args.id)
     else:
-        parser.error("Provide either --goal or one subcommand: add, list, done.")
+        parser.error("Provide --gui, --goal, or one subcommand: add, list, done.")
 
 
 if __name__ == "__main__":
