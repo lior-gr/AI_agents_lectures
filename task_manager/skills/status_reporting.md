@@ -2,17 +2,26 @@
 
 # status_reporting
 
-## When It Applies
-- Use when user asks for progress, checkpoints, or current state.
-- Use during long workflows where step visibility is important.
+## When To Use This Skill
+- Use when the user asks for progress, checkpoint summaries, or current state.
+- Use during multi-step work where traceability matters.
 
-## What It Changes About Reasoning
-- Report progress in chronological order.
-- Distinguish clearly: completed, in-progress, pending, blocked.
-- Include concise next action and key risk if relevant.
-- Prefer factual state updates over narrative detail.
+## Structured Reasoning Rules
+1. Report state in chronological order.
+2. Classify items clearly as completed, in progress, pending, or blocked.
+3. Tie each status claim to concrete evidence from the current run.
+4. Include the immediate next action and main risk when relevant.
+5. Keep reports concise and operational, not narrative.
+6. Highlight deviations from expected flow.
+7. Distinguish execution results from interpretation.
 
-## What It Must Never Do
-- Never alter workflow behavior just to improve status appearance.
-- Never claim completion without evidence.
-- Never perform execution actions while reporting status.
+## Constraints
+- Never report completion without evidence.
+- Never hide blockers, failures, or uncertainty.
+- Never change workflow behavior to make status look better.
+- Never mix future intent with completed state.
+
+## Output Quality Bar
+- Reader should understand current state in one pass.
+- Progress should be audit-friendly and timestamp-compatible.
+- Status should be precise enough to guide the next step.

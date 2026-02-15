@@ -5,7 +5,7 @@ response per line to stdout.
 
 Request format:
 {
-  "tool": "add_task" | "list_tasks" | "complete_task",
+  "tool": "add_task" | "list_tasks" | "complete_task" | "delete_task" | "delete_tasks",
   "arguments": { ... }
 }
 
@@ -29,7 +29,7 @@ import json
 import sys
 from contextlib import redirect_stdout
 
-from storage import add_task, list_tasks, mark_done
+from storage import add_task, delete_task, delete_tasks, list_tasks, mark_done
 
 
 def _capture_storage_output(func, *args) -> str:
@@ -61,6 +61,20 @@ def _dispatch_tool(tool: str, arguments: dict) -> str:
         if not isinstance(task_id, int):
             raise ValueError("'complete_task' requires integer argument: task_id")
         return _capture_storage_output(mark_done, task_id)
+
+    if tool == "delete_task":
+        task_id = arguments.get("task_id")
+        if not isinstance(task_id, int):
+            raise ValueError("'delete_task' requires integer argument: task_id")
+        return _capture_storage_output(delete_task, task_id)
+
+    if tool == "delete_tasks":
+        task_ids = arguments.get("task_ids")
+        if not isinstance(task_ids, list) or not task_ids:
+            raise ValueError("'delete_tasks' requires non-empty array argument: task_ids")
+        if not all(isinstance(task_id, int) for task_id in task_ids):
+            raise ValueError("'delete_tasks' requires all task_ids to be integers")
+        return _capture_storage_output(delete_tasks, task_ids)
 
     raise ValueError(f"Unsupported tool: {tool}")
 

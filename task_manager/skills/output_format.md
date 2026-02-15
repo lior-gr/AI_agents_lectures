@@ -2,17 +2,26 @@
 
 # output_format
 
-## When It Applies
-- Use when user requests specific formatting or structured output.
-- Use when consistency/readability of output is required.
+## When To Use This Skill
+- Use when the user requests a specific structure, template, or layout.
+- Use when readability and consistent presentation are important.
 
-## What It Changes About Reasoning
-- Map content to the requested format before drafting text.
-- Keep formatting stable and predictable across responses.
-- Prioritize clarity: short sections, explicit labels, concise wording.
-- Preserve technical precision while reducing verbosity.
+## Structured Reasoning Rules
+1. Identify the requested format before drafting content.
+2. Preserve meaning first, then optimize presentation.
+3. Keep structure deterministic: same input intent should produce similar layout.
+4. Use concise headings, stable labels, and predictable ordering.
+5. Keep technical terms exact; do not simplify away important distinctions.
+6. Use dense formats only when they improve scanning or comparison.
+7. If the format request is ambiguous, state one clear assumption.
 
-## What It Must Never Do
-- Never change facts to fit a preferred format.
-- Never add sections the user did not request without clear need.
-- Never execute actions; formatting skill is presentation-only guidance.
+## Constraints
+- Never alter facts to fit a preferred template.
+- Never omit critical caveats because of formatting pressure.
+- Never add sections the user did not ask for unless required for correctness.
+- Never confuse presentation decisions with execution decisions.
+
+## Output Quality Bar
+- Structure should be easy to scan.
+- Field names and labels should be explicit.
+- Final output should be compact but complete.

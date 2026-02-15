@@ -17,6 +17,8 @@ import json
 from contextlib import redirect_stdout
 
 from storage import add_task as storage_add_task
+from storage import delete_task as storage_delete_task
+from storage import delete_tasks as storage_delete_tasks
 from storage import list_tasks as storage_list_tasks
 from storage import mark_done as storage_mark_done
 
@@ -67,6 +69,43 @@ TOOL_SCHEMAS = [
                     }
                 },
                 "required": ["task_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_task",
+            "description": "Delete one task by id.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {
+                        "type": "integer",
+                        "description": "Numeric task id to delete.",
+                    }
+                },
+                "required": ["task_id"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_tasks",
+            "description": "Delete multiple tasks by id in one call.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "List of numeric task ids to delete.",
+                    }
+                },
+                "required": ["task_ids"],
                 "additionalProperties": False,
             },
         },
@@ -126,5 +165,19 @@ def run_tool_call(tool_name: str, raw_arguments: str) -> str:
         if not isinstance(task_id, int):
             return "Error: 'task_id' is required and must be an integer."
         return _capture_storage_output(storage_mark_done, task_id)
+
+    if tool_name == "delete_task":
+        task_id = args.get("task_id")
+        if not isinstance(task_id, int):
+            return "Error: 'task_id' is required and must be an integer."
+        return _capture_storage_output(storage_delete_task, task_id)
+
+    if tool_name == "delete_tasks":
+        task_ids = args.get("task_ids")
+        if not isinstance(task_ids, list) or not task_ids:
+            return "Error: 'task_ids' is required and must be a non-empty array of integers."
+        if not all(isinstance(task_id, int) for task_id in task_ids):
+            return "Error: 'task_ids' must contain only integers."
+        return _capture_storage_output(storage_delete_tasks, task_ids)
 
     return f"Error: unknown tool '{tool_name}'."

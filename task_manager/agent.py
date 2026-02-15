@@ -7,17 +7,19 @@ Authentication note:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
 import logging
 import os
 from pathlib import Path
+import re
 from typing import Callable
 
 from openai import OpenAI
 
 from mcp_client import MCPClient
-from skill_router import ALLOWED_SKILLS, route_skills_with_model
+from skill_router import ALLOWED_SKILLS, route_goal_intent_with_model, route_skills_with_model
 from tools import TOOL_SCHEMAS
 
 # Basic logger used to show progress for each step in the loop.
@@ -46,6 +48,7 @@ SYSTEM_PROMPT = (
     "Use tools to do task operations. "
     "Do not plan; do not explain long strategies. "
     "For requests like 'add X and then show tasks', call add_task first, then list_tasks. "
+    "For delete-by-criteria requests, call list_tasks, then delete matched ids (prefer delete_tasks for multiple ids), then call list_tasks to verify. "
     "Do not edit JSON directly. "
     "Once the goal is satisfied, return a short final answer."
 )
@@ -54,7 +57,9 @@ SYSTEM_PROMPT = (
 SKILLS_DIR = Path(__file__).resolve().parent / "skills"
 SKILL_FILES: dict[str, Path] = {
     "always_on": SKILLS_DIR / "always_on.md",
+    # Keep task_planning mapped to the richer planning guidance file.
     "task_planning": SKILLS_DIR / "task_planning.md",
+    "task_deletion": SKILLS_DIR / "task_deletion.md",
     "status_reporting": SKILLS_DIR / "status_reporting.md",
     "output_format": SKILLS_DIR / "output_format.md",
 }
@@ -211,6 +216,169 @@ def _emit_event(
         LOGGER.debug("Ignoring on_event callback failure: %s", exc)
 
 
+@dataclass
+class GoalValidationState:
+    """Track deterministic evidence used by goal-completion validator."""
+
+    wants_add: bool
+    wants_delete: bool
+    initial_count: int | None = None
+    latest_count: int | None = None
+    add_success_count: int = 0
+    delete_success_count: int = 0
+    saw_mutation: bool = False
+    saw_post_mutation_list: bool = False
+
+
+_TASK_LINE_PATTERN = re.compile(r"^\s*\d+\.\s+\[[ xX]\]\s+", re.MULTILINE)
+_ADD_SUCCESS_PATTERN = re.compile(r"Added task #\d+:")
+_DELETE_SUCCESS_PATTERN = re.compile(r"Deleted task #\d+:")
+_DELETE_BULK_SUCCESS_PATTERN = re.compile(r"Deleted\s+(\d+)\s+task\(s\):")
+
+
+def _detect_goal_intents_keyword(goal: str) -> tuple[bool, bool]:
+    """Keyword-only fallback for add/delete goal intent detection."""
+    text = goal.lower()
+    add_markers = (" add ", " create ", " new task", " insert ")
+    delete_markers = (" delete ", " remove ", " purge ", " clean up ")
+    wants_add = any(marker in f" {text} " for marker in add_markers)
+    wants_delete = any(marker in f" {text} " for marker in delete_markers)
+    return wants_add, wants_delete
+
+
+def _detect_goal_intents_hybrid(goal: str, *, client: OpenAI, model: str) -> tuple[bool, bool, str]:
+    """Detect add/delete intent with model router first and keyword fallback second.
+
+    Hybrid policy:
+    - Model router handles paraphrases and richer language.
+    - Deterministic fallback ensures behavior if router output is invalid.
+    """
+    routed_call = partial(call_router_model, client=client, model=model)
+    ok, intent, reason = route_goal_intent_with_model(
+        goal=goal,
+        call_model_fn=routed_call,
+        max_attempts=ROUTER_MAX_ATTEMPTS,
+    )
+    if ok:
+        return bool(intent["wants_add"]), bool(intent["wants_delete"]), f"model_router: {reason}"
+
+    wants_add, wants_delete = _detect_goal_intents_keyword(goal)
+    fallback_reason = (
+        f"keyword_fallback: {reason}; "
+        f"wants_add={wants_add}, wants_delete={wants_delete}"
+    )
+    return wants_add, wants_delete, fallback_reason
+
+
+def _parse_list_count(tool_result: str) -> int | None:
+    """Parse task count from list output text."""
+    if "No tasks yet." in tool_result:
+        return 0
+    matches = _TASK_LINE_PATTERN.findall(tool_result)
+    if matches:
+        return len(matches)
+    return None
+
+
+def _update_validation_state(state: GoalValidationState, tool_name: str, tool_result: str) -> None:
+    """Update validator evidence from one executed tool result."""
+    if tool_name == "list_tasks":
+        count = _parse_list_count(tool_result)
+        if count is None:
+            return
+        if state.initial_count is None:
+            state.initial_count = count
+        state.latest_count = count
+        if state.saw_mutation:
+            state.saw_post_mutation_list = True
+        return
+
+    if tool_name == "add_task" and _ADD_SUCCESS_PATTERN.search(tool_result):
+        state.add_success_count += 1
+        state.saw_mutation = True
+        return
+
+    if tool_name == "delete_task" and _DELETE_SUCCESS_PATTERN.search(tool_result):
+        state.delete_success_count += 1
+        state.saw_mutation = True
+        return
+
+    if tool_name == "delete_tasks":
+        match = _DELETE_BULK_SUCCESS_PATTERN.search(tool_result)
+        if not match:
+            return
+        deleted_count = int(match.group(1))
+        if deleted_count > 0:
+            state.delete_success_count += deleted_count
+            state.saw_mutation = True
+        return
+
+
+def _validate_goal_completion(state: GoalValidationState) -> tuple[bool, str]:
+    """Validate completion for add/delete goals using deterministic rules."""
+    if not state.wants_add and not state.wants_delete:
+        return True, "No add/delete validation required."
+
+    if state.wants_add and state.add_success_count < 1:
+        return False, "Goal requests add, but no successful add operation was observed."
+
+    if state.wants_delete and state.delete_success_count < 1:
+        return False, "Goal requests delete, but no successful delete operation was observed."
+
+    if state.initial_count is None or state.latest_count is None:
+        return False, "Need list output to compare task counts before and after operations."
+
+    if state.saw_mutation and not state.saw_post_mutation_list:
+        return False, "Need a final list verification after add/delete operations."
+
+    if state.wants_add and not state.wants_delete:
+        if state.latest_count <= state.initial_count:
+            return False, "Add goal not satisfied: final task count did not increase."
+
+    if state.wants_delete and not state.wants_add:
+        if state.latest_count >= state.initial_count:
+            return False, "Delete goal not satisfied: final task count did not decrease."
+
+    if state.wants_add and state.wants_delete:
+        # Mixed goal: net count can be unchanged. Validate both operation types happened.
+        expected_count = state.initial_count + state.add_success_count - state.delete_success_count
+        if state.latest_count != expected_count:
+            return False, "Mixed add/delete validation mismatch: final count does not match operations."
+
+    return True, "Validation passed."
+
+
+def _build_validation_feedback(state: GoalValidationState, reason: str) -> str:
+    """Build deterministic corrective guidance for the next model turn."""
+    if state.wants_delete and state.delete_success_count < 1:
+        return (
+            "Validation gate not satisfied. "
+            f"{reason} "
+            "Required next action: use the latest task list and delete matched ids "
+            "(prefer delete_tasks for multiple ids), then call list_tasks to verify."
+        )
+
+    if state.wants_delete and state.delete_success_count > 0 and not state.saw_post_mutation_list:
+        return (
+            "Validation gate not satisfied. "
+            f"{reason} "
+            "Required next action: call list_tasks now to verify the post-delete state."
+        )
+
+    if state.wants_add and state.add_success_count < 1:
+        return (
+            "Validation gate not satisfied. "
+            f"{reason} "
+            "Required next action: call add_task for the requested items, then call list_tasks to verify."
+        )
+
+    return (
+        "Validation gate not satisfied. "
+        f"{reason} "
+        "Continue with required operations before final answer."
+    )
+
+
 def _create_chat_completion_with_token_compat(client: OpenAI, model: str, messages: list[dict]):
     """Create chat completion with compatibility fallback for token-limit parameter names.
 
@@ -297,6 +465,16 @@ def run_agent(
     # This loop is unchanged: same step control, history updates, and stopping conditions.
     # Only the tool execution transport changed (direct call -> MCP client request).
     try:
+        # If the model later returns empty output, we can still return useful data
+        # from the most recent successful tool execution.
+        wants_add, wants_delete, intent_reason = _detect_goal_intents_hybrid(
+            goal,
+            client=client,
+            model=chosen_model,
+        )
+        _emit_event(on_event, "intent_route", "goal_intent_router", intent_reason)
+        validation_state = GoalValidationState(wants_add=wants_add, wants_delete=wants_delete)
+        last_tool_result: str | None = None
         for step in range(1, max_steps + 1):
             LOGGER.info("Step %s/%s: requesting model response", step, max_steps)
             _emit_event(on_event, "step_start", f"step_{step}", f"{step}/{max_steps}", step=step)
@@ -346,6 +524,11 @@ def run_agent(
                         tool_result = f"Error executing tool '{tool_name}': {exc}"
                         _emit_event(on_event, "tool_result", tool_name, tool_result, step=step)
 
+                    if tool_result.strip():
+                        last_tool_result = tool_result
+
+                    _update_validation_state(validation_state, tool_name, tool_result)
+
                     messages.append(
                         {
                             # This marks the message as tool output.
@@ -363,12 +546,44 @@ def run_agent(
             # STOPPING CONDITIONS:
             # Condition 1: assistant returned a normal answer with no tool calls, so we can stop early.
             if assistant_text.strip():
+                is_valid, validation_reason = _validate_goal_completion(validation_state)
+                if not is_valid:
+                    _emit_event(on_event, "validation", "not_done", validation_reason, step=step)
+                    messages.append(
+                        {
+                            "role": "system",
+                            "content": _build_validation_feedback(validation_state, validation_reason),
+                        }
+                    )
+                    continue
+
                 LOGGER.info("Stopping at step %s: final answer received", step)
                 _emit_event(on_event, "stop", "final_answer", "Final answer produced.", step=step)
                 return assistant_text
 
             # Condition 2: no tool calls and empty output; stop to avoid useless iterations.
             LOGGER.info("Stopping at step %s: empty response with no tool calls", step)
+            is_valid, validation_reason = _validate_goal_completion(validation_state)
+            if not is_valid:
+                _emit_event(on_event, "validation", "not_done", validation_reason, step=step)
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": _build_validation_feedback(validation_state, validation_reason),
+                    }
+                )
+                continue
+
+            if last_tool_result is not None:
+                _emit_event(
+                    on_event,
+                    "stop",
+                    "empty_response_with_tool_fallback",
+                    "No tool calls and empty assistant output; returning last tool result.",
+                    step=step,
+                )
+                return last_tool_result
+
             _emit_event(on_event, "stop", "empty_response", "No tool calls and empty assistant output.", step=step)
             return "No final answer produced."
 

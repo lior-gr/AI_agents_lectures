@@ -81,6 +81,7 @@ def _make_table_item(text: str) -> QTableWidgetItem:
 def _event_background_color(event_type: str) -> QColor:
     """Return a soft background color per event type for scan-friendly logs."""
     palette = {
+        "goal": QColor("#F4F4F4"),
         "agent_start": QColor("#E8F4FD"),
         "skill_route": QColor("#FFE8CC"),
         "skill_used": QColor("#EAF8EF"),
@@ -111,6 +112,7 @@ class UiController(QObject):
         progress_table: QTableWidget,
         progress_tree: QTreeWidget,
         progress_view_stack: QStackedWidget,
+        goal_selector: QComboBox,
         view_selector: QComboBox,
         expand_button: QPushButton,
         collapse_button: QPushButton,
@@ -124,15 +126,19 @@ class UiController(QObject):
         self._progress_table = progress_table
         self._progress_tree = progress_tree
         self._progress_view_stack = progress_view_stack
+        self._goal_selector = goal_selector
         self._view_selector = view_selector
         self._expand_button = expand_button
         self._collapse_button = collapse_button
         self._copy_button = copy_button
-        self._sequence = 0
-        self._progress_rows: list[tuple[str, str, str, str, str]] = []
-        self._session_root: QTreeWidgetItem | None = None
-        self._skill_route_node: QTreeWidgetItem | None = None
-        self._step_nodes: dict[int, QTreeWidgetItem] = {}
+        self._run_counter = 0
+        self._active_run_id: str | None = None
+        self._selected_run_id: str | None = None
+        self._run_rows: dict[str, list[tuple[str, str, str, str, str]]] = {}
+        self._run_goals: dict[str, str] = {}
+        self._run_root_nodes: dict[str, QTreeWidgetItem] = {}
+        self._run_skill_route_nodes: dict[str, QTreeWidgetItem] = {}
+        self._run_step_nodes: dict[str, dict[int, QTreeWidgetItem]] = {}
         self._thread: QThread | None = None
         self._worker: GoalWorker | None = None
         self._reset_progress_views()
@@ -143,29 +149,79 @@ class UiController(QObject):
         self._goal_input.setEnabled(not is_busy)
 
     def _reset_progress_views(self) -> None:
-        """Clear both progress views and recreate deterministic tree roots."""
+        """Clear all progress history and UI representations."""
         self._progress_table.setRowCount(0)
         self._progress_tree.clear()
-        self._progress_rows.clear()
-        self._skill_route_node = None
-        self._step_nodes.clear()
+        self._goal_selector.blockSignals(True)
+        self._goal_selector.clear()
+        self._goal_selector.blockSignals(False)
+        self._active_run_id = None
+        self._selected_run_id = None
+        self._run_rows.clear()
+        self._run_goals.clear()
+        self._run_root_nodes.clear()
+        self._run_skill_route_nodes.clear()
+        self._run_step_nodes.clear()
+        self._run_counter = 0
 
-        # Root grouping helps collapse/expand entire run quickly.
-        self._session_root = QTreeWidgetItem(["", "", "session", "Run", ""])
-        self._progress_tree.addTopLevelItem(self._session_root)
-        self._session_root.setExpanded(True)
+    def _append_table_row(self, row_values: tuple[str, str, str, str, str]) -> None:
+        """Append one row to table view with event-type color coding."""
+        color = _event_background_color(row_values[2])
+        row = self._progress_table.rowCount()
+        self._progress_table.insertRow(row)
+        for col, value in enumerate(row_values):
+            item = _make_table_item(value)
+            item.setBackground(color)
+            self._progress_table.setItem(row, col, item)
 
-    def _get_step_node(self, step: int) -> QTreeWidgetItem:
-        """Return existing step node or create one in first-seen order."""
-        if step in self._step_nodes:
-            return self._step_nodes[step]
+    def _render_selected_run_table(self) -> None:
+        """Render table rows only for the currently selected goal run."""
+        self._progress_table.setRowCount(0)
+        if self._selected_run_id is None:
+            return
+        for row_values in self._run_rows.get(self._selected_run_id, []):
+            self._append_table_row(row_values)
+        self._progress_table.scrollToBottom()
 
-        parent = self._session_root or self._progress_tree.invisibleRootItem()
+    def _start_new_run(self, goal: str) -> None:
+        """Register a new goal run and make it the active/selected run."""
+        self._run_counter += 1
+        run_id = f"goal_{self._run_counter}"
+        goal_text = goal.strip().replace("\r\n", " ").replace("\n", " ")
+        short_goal = goal_text if len(goal_text) <= 60 else f"{goal_text[:57]}..."
+        run_label = f"{self._run_counter}. {short_goal}"
+
+        self._active_run_id = run_id
+        self._selected_run_id = run_id
+        self._run_rows[run_id] = []
+        self._run_goals[run_id] = goal_text
+        self._run_step_nodes[run_id] = {}
+
+        goal_root = QTreeWidgetItem(["", "", "goal", run_label, goal_text])
+        _set_tree_item_background(goal_root, _event_background_color("goal"))
+        goal_root.setExpanded(True)
+        self._run_root_nodes[run_id] = goal_root
+        self._progress_tree.addTopLevelItem(goal_root)
+
+        self._goal_selector.blockSignals(True)
+        self._goal_selector.addItem(run_label, run_id)
+        self._goal_selector.setCurrentIndex(self._goal_selector.count() - 1)
+        self._goal_selector.blockSignals(False)
+        self._render_selected_run_table()
+        self._progress_tree.scrollToItem(goal_root)
+
+    def _get_step_node(self, run_id: str, step: int) -> QTreeWidgetItem:
+        """Return existing step node for one run or create it in first-seen order."""
+        step_nodes = self._run_step_nodes.setdefault(run_id, {})
+        if step in step_nodes:
+            return step_nodes[step]
+
+        parent = self._run_root_nodes.get(run_id, self._progress_tree.invisibleRootItem())
         step_item = QTreeWidgetItem(["", "", "step", f"Step {step}", ""])
         parent.addChild(step_item)
         step_item.setExpanded(True)
         _set_tree_item_background(step_item, _event_background_color("step_start"))
-        self._step_nodes[step] = step_item
+        step_nodes[step] = step_item
         return step_item
 
     def _start_worker(self, goal: str) -> None:
@@ -190,8 +246,12 @@ class UiController(QObject):
     @Slot(dict)
     def on_progress_event(self, event: dict) -> None:
         """Append one backend instrumentation event in chronological order."""
-        self._sequence += 1
-        sequence = str(self._sequence)
+        run_id = self._active_run_id
+        if run_id is None:
+            return
+
+        run_rows = self._run_rows.setdefault(run_id, [])
+        sequence = str(len(run_rows) + 1)
         timestamp = str(event.get("timestamp", ""))
         event_type = str(event.get("type", ""))
         name = str(event.get("name", ""))
@@ -199,55 +259,60 @@ class UiController(QObject):
         step = event.get("step")
         if step is not None:
             details = f"step={step} | {details}" if details else f"step={step}"
-        color = _event_background_color(event_type)
         row_values = (sequence, timestamp, event_type, name, details)
-        self._progress_rows.append(row_values)
+        run_rows.append(row_values)
 
-        row = self._progress_table.rowCount()
-        self._progress_table.insertRow(row)
-        for col, value in enumerate(row_values):
-            item = _make_table_item(value)
-            item.setBackground(color)
-            self._progress_table.setItem(row, col, item)
-        self._progress_table.scrollToBottom()
+        if run_id == self._selected_run_id:
+            self._append_table_row(row_values)
+            self._progress_table.scrollToBottom()
 
-        parent = self._session_root or self._progress_tree.invisibleRootItem()
+        color = _event_background_color(event_type)
+        parent = self._run_root_nodes.get(run_id, self._progress_tree.invisibleRootItem())
         if isinstance(step, int):
-            parent = self._get_step_node(step)
+            parent = self._get_step_node(run_id, step)
         elif event_type == "skill_route":
-            # Keep a dedicated routing stage node so selected skills can be nested under it.
-            self._skill_route_node = QTreeWidgetItem([sequence, timestamp, event_type, name, details])
-            parent.addChild(self._skill_route_node)
-            _set_tree_item_background(self._skill_route_node, color)
-            self._skill_route_node.setExpanded(True)
-            self._progress_tree.scrollToItem(self._skill_route_node)
+            # Keep per-goal routing node so selected skills can be nested under it.
+            route_node = QTreeWidgetItem([sequence, timestamp, event_type, name, details])
+            parent.addChild(route_node)
+            _set_tree_item_background(route_node, color)
+            route_node.setExpanded(True)
+            self._run_skill_route_nodes[run_id] = route_node
+            self._progress_tree.scrollToItem(route_node)
             return
-        elif event_type == "skill_used" and self._skill_route_node is not None:
-            parent = self._skill_route_node
+        elif event_type == "skill_used":
+            route_node = self._run_skill_route_nodes.get(run_id)
+            if route_node is not None:
+                parent = route_node
 
         tree_item = QTreeWidgetItem([sequence, timestamp, event_type, name, details])
         parent.addChild(tree_item)
         _set_tree_item_background(tree_item, color)
         self._progress_tree.scrollToItem(tree_item)
 
-    def _build_progress_report_text(self) -> str:
-        """Build a deterministic plain-text report for clipboard export."""
+    def _build_progress_report_text(self, run_id: str | None) -> str:
+        """Build a compact TSV report for one selected goal run.
+
+        We use compact, non-padded lines so long details do not expand all
+        columns into unreadable widths.
+        """
         headers = ("#", "Time", "Type", "Name", "Details")
-        rows = [headers, *self._progress_rows]
-        widths = [0, 0, 0, 0, 0]
+        if run_id is None:
+            return "(no goal selected)"
+
+        def clean(cell: str) -> str:
+            # Keep each row single-line for stable copy/paste behavior.
+            return cell.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\\n")
+
+        goal_text = self._run_goals.get(run_id, "")
+        rows = self._run_rows.get(run_id, [])
+        lines = [f"Goal\t{clean(goal_text)}", "\t".join(headers)]
+        if not rows:
+            lines.append("(no progress events yet)")
+            return "\n".join(lines)
+
         for row in rows:
-            for idx, cell in enumerate(row):
-                widths[idx] = max(widths[idx], len(cell))
-
-        def fmt(row: tuple[str, str, str, str, str]) -> str:
-            return " | ".join(cell.ljust(widths[idx]) for idx, cell in enumerate(row))
-
-        header_line = fmt(headers)
-        divider = "-+-".join("-" * width for width in widths)
-        body = [fmt(row) for row in self._progress_rows]
-        if not body:
-            body = ["(no progress events yet)"]
-        return "\n".join([header_line, divider, *body])
+            lines.append("\t".join(clean(cell) for cell in row))
+        return "\n".join(lines)
 
     @Slot(str)
     def on_worker_completed(self, result: str) -> None:
@@ -271,15 +336,25 @@ class UiController(QObject):
 
         goal = self._goal_input.text().strip()
         self._output_box.clear()
-        self._reset_progress_views()
-        self._sequence = 0
 
         if not goal:
             self._output_box.setPlainText("Please enter a non-empty goal.")
             return
 
+        self._start_new_run(goal)
         self._set_busy(True)
         self._start_worker(goal)
+
+    @Slot(int)
+    def on_goal_selection_changed(self, index: int) -> None:
+        """Switch table/copy target to one selected goal run."""
+        run_id = self._goal_selector.itemData(index)
+        self._selected_run_id = run_id if isinstance(run_id, str) else None
+        self._render_selected_run_table()
+        if self._selected_run_id is not None:
+            root = self._run_root_nodes.get(self._selected_run_id)
+            if root is not None:
+                self._progress_tree.scrollToItem(root)
 
     @Slot(str)
     def on_view_mode_changed(self, mode: str) -> None:
@@ -299,8 +374,8 @@ class UiController(QObject):
 
     @Slot()
     def on_copy_progress(self) -> None:
-        """Copy the full progress report to clipboard."""
-        report_text = self._build_progress_report_text()
+        """Copy only the selected goal run report to clipboard."""
+        report_text = self._build_progress_report_text(self._selected_run_id)
         clipboard = QApplication.clipboard()
         clipboard.setText(report_text)
         self._output_box.append("\n[info] Progress report copied to clipboard.")
@@ -358,6 +433,10 @@ def create_window(submit_goal: Callable[..., str]) -> QtWindowRunner:
     progress_label = QLabel("Agent Progress")
     progress_header_row.addWidget(progress_label)
     progress_header_row.addStretch()
+    progress_header_row.addWidget(QLabel("Goal"))
+    goal_selector = QComboBox()
+    goal_selector.setMinimumContentsLength(22)
+    progress_header_row.addWidget(goal_selector)
     progress_header_row.addWidget(QLabel("View"))
     view_selector = QComboBox()
     view_selector.addItems(["Table", "Tree"])
@@ -412,6 +491,7 @@ def create_window(submit_goal: Callable[..., str]) -> QtWindowRunner:
         progress_table=progress_table,
         progress_tree=progress_tree,
         progress_view_stack=progress_view_stack,
+        goal_selector=goal_selector,
         view_selector=view_selector,
         expand_button=expand_button,
         collapse_button=collapse_button,
@@ -420,6 +500,7 @@ def create_window(submit_goal: Callable[..., str]) -> QtWindowRunner:
 
     submit_button.clicked.connect(controller.on_submit)
     goal_input.returnPressed.connect(controller.on_submit)
+    goal_selector.currentIndexChanged.connect(controller.on_goal_selection_changed)
     view_selector.currentTextChanged.connect(controller.on_view_mode_changed)
     expand_button.clicked.connect(controller.on_expand_tree)
     collapse_button.clicked.connect(controller.on_collapse_tree)
