@@ -1,0 +1,243 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Lesson 5 — UI Boundary</title>
+<style>
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 40px; line-height: 1.5; }
+pre { background: #f3f3f3; padding: 12px; overflow-x: auto; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+hr { margin: 24px 0; }
+</style>
+</head>
+<body>
+<p><h1>🧠 Tutorial: Codex, Agents, MCP &amp; Skills  </h1></p>
+<p><h1>Lesson 5 — Adding a UI Without Breaking Architecture</h1></p>
+
+<p><hr/></p>
+
+<p><h2>🎯 Goal of This Lesson</h2></p>
+
+<p>So far we have:</p>
+
+<ul>
+<li>A deterministic system (Lesson 1)</li>
+<li>A real agent loop (Lesson 2)</li>
+<li>MCP decoupling (Lesson 3)</li>
+<li>Skills (Lesson 4)</li>
+</ul>
+
+<p>Now we will:</p>
+
+<ul>
+<li>Add a minimal GUI layer</li>
+<li>Keep architecture unchanged</li>
+<li>Prove UI is just another boundary</li>
+<li>Reinforce separation principles</li>
+</ul>
+
+<p>This lesson is about discipline.</p>
+
+<p><hr/></p>
+
+<p><h2>5.1 Core Principle</h2></p>
+
+<p>UI must not:</p>
+
+<ul>
+<li>Contain agent logic</li>
+<li>Call OpenAI directly</li>
+<li>Execute tools</li>
+<li>Modify storage directly</li>
+</ul>
+
+<p>UI is only:</p>
+
+<ul>
+<li>Input collector</li>
+<li>Output renderer</li>
+</ul>
+
+<p>Nothing more.</p>
+
+<p><hr/></p>
+
+<p><h2>5.2 New Architecture Diagram</h2></p>
+
+<p><pre><code>
+User
+  ↓
+GUI (ui.py)
+  ↓
+Application Layer (main.py)
+  ↓
+Agent
+  ↓
+MCP
+  ↓
+Storage
+</code></pre></p>
+
+<p>The UI sits above everything.</p>
+
+<p>It does not know how anything works internally.</p>
+
+<p><hr/></p>
+
+<p><h2>5.3 Choosing the GUI Toolkit</h2></p>
+
+<p>Windows-first constraint.</p>
+
+<p>Options:</p>
+
+<ul>
+<li>Tkinter (built-in, simple)</li>
+<li>PySide6 / Qt6 (more professional, slightly heavier)</li>
+</ul>
+
+<p>For learning clarity, start with Tkinter.</p>
+<p>You may upgrade to Qt later.</p>
+
+<p><hr/></p>
+
+<p><h2>5.4 Task 1 — Create Minimal UI</h2></p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; Create ui.py.</p>
+<p>&gt; Requirements:</p>
+<p>&gt; - Simple window with:</p>
+<p>&gt;     - Text input field</p>
+<p>&gt;     - "Submit" button</p>
+<p>&gt;     - Output display area</p>
+<p>&gt; - When user clicks Submit:</p>
+<p>&gt;     - It calls existing main application function</p>
+<p>&gt; - Do NOT import OpenAI here.</p>
+<p>&gt; - Do NOT implement agent logic here.</p>
+<p>&gt; - Add comments explaining separation of concerns.</p>
+
+<p><hr/></p>
+
+<p><h2>5.5 Modify main.py</h2></p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; Modify main.py so that:</p>
+<p>&gt; - It can be launched in GUI mode using --gui flag</p>
+<p>&gt; - GUI calls the same functions the CLI uses</p>
+<p>&gt; - No duplicate logic</p>
+<p>&gt; - Add comments explaining why CLI and GUI share the same backend</p>
+
+<p><hr/></p>
+
+<p><h2>5.6 What Must Remain True</h2></p>
+
+<p>The following files should remain untouched logically:</p>
+
+<ul>
+<li>agent.py</li>
+<li>mcp_server.py</li>
+<li>mcp_client.py</li>
+<li>storage.py</li>
+<li>skills/</li>
+</ul>
+
+<p>If adding UI required modifying those — architecture leaked.</p>
+
+<p><hr/></p>
+
+<p><h2>5.7 Test Scenario</h2></p>
+
+<p>1. Launch CLI:</p>
+<p>   python main.py --goal "Add buy milk"</p>
+
+<p>2. Launch GUI:</p>
+<p>   python main.py --gui</p>
+
+<p>3. Enter:</p>
+<p>   Plan my tasks</p>
+
+<p>Both paths must go through the same agent.</p>
+
+<p>If they don’t — refactor.</p>
+
+<p><hr/></p>
+
+<p><h2>5.8 Why This Matters</h2></p>
+
+<p>Most AI systems fail architecturally because:</p>
+
+<ul>
+<li>UI mixes reasoning</li>
+<li>Tools mix with agent logic</li>
+<li>Storage imports model code</li>
+</ul>
+
+<p>We are proving:</p>
+
+<p>You can change surface (CLI → GUI)</p>
+<p>Without touching core intelligence.</p>
+
+<p>That is professional layering.</p>
+
+<p><hr/></p>
+
+<p><h2>5.9 Optional Extension — Qt6 Upgrade</h2></p>
+
+<p>If you want more realism:</p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; Replace Tkinter UI with PySide6 version.</p>
+<p>&gt; Keep identical backend interface.</p>
+<p>&gt; Do not modify agent, MCP, or storage.</p>
+
+<p>If backend changes were required — design is flawed.</p>
+
+<p><hr/></p>
+
+<p><h2>5.10 What This Teaches</h2></p>
+
+<p>You now understand:</p>
+
+<ul>
+<li>UI is a boundary</li>
+<li>Agent is a control system</li>
+<li>MCP is an execution boundary</li>
+<li>Skill is reasoning injection</li>
+<li>Storage is persistence</li>
+</ul>
+
+<p>Each layer has one responsibility.</p>
+
+<p><hr/></p>
+
+<p><h2>🎯 Lesson 5 Checkpoint</h2></p>
+
+<p>Answer:</p>
+
+<p>1. Does GUI know about OpenAI?</p>
+<p>2. Does GUI know about MCP?</p>
+<p>3. Can we replace UI entirely without touching agent?</p>
+<p>4. Is CLI now just another UI?</p>
+<p>5. Did adding GUI increase system intelligence?</p>
+
+<p>If answers are clear, you understand clean layering.</p>
+
+<p><hr/></p>
+
+<p><h2>🔜 Next Phase Preview</h2></p>
+
+<p>Next, we will:</p>
+
+<ul>
+<li>Compile all lessons into a Cookbook</li>
+<li>Refactor project structure</li>
+<li>Add logging &amp; observability</li>
+<li>Discuss production-hardening steps</li>
+<li>Provide roadmap for maturing this into a real product</li>
+</ul>
+
+<p>You now understand the architecture.</p>
+</body>
+</html>

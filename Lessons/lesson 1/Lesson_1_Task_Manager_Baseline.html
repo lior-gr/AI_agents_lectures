@@ -1,0 +1,273 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Lesson 1 — Task Manager Baseline</title>
+<style>
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 40px; line-height: 1.5; }
+pre { background: #f3f3f3; padding: 12px; overflow-x: auto; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+hr { margin: 24px 0; }
+</style>
+</head>
+<body>
+<p><h1>🧠 Tutorial: Codex, Agents, MCP &amp; Skills  </h1></p>
+<p><h1>Lesson 1 — Building a Baseline System (No Agents Yet)</h1></p>
+
+<p><hr/></p>
+
+<p><h2>🎯 Goal of This Lesson</h2></p>
+
+<p>Before we build an agent…</p>
+
+<p>We must build something <strong>that does not require one</strong>.</p>
+
+<p>Why?</p>
+
+<p>Because if you don’t understand a deterministic baseline,</p>
+<p>you will not understand what the agent actually adds.</p>
+
+<p>In this lesson we will:</p>
+
+<ul>
+<li>Set up Windows-first environment</li>
+<li>Create a minimal CLI task manager</li>
+<li>Use Codex deliberately and incrementally</li>
+<li>Force Codex to explain its code</li>
+<li>Keep architecture clean</li>
+</ul>
+
+<p>No agents yet. No MCP yet. No skills yet.</p>
+
+<p>Just a deterministic system.</p>
+
+<p><hr/></p>
+
+<p><h2>1.1 Mental Model</h2></p>
+
+<p>We are building this:</p>
+
+<p><pre><code>
+User → CLI → Task Storage → File (JSON)
+</code></pre></p>
+
+<p>No decisions.  </p>
+<p>No loops.  </p>
+<p>No planning.</p>
+
+<p>Pure command → effect.</p>
+
+<p><hr/></p>
+
+<p><h2>1.2 Environment Setup (Windows First)</h2></p>
+
+<p>### Task 1 — Ask Codex to Scaffold the Project</p>
+
+<p>Open VS Code in an empty folder.</p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; Create a minimal cross-platform Python CLI project for a task manager.  </p>
+<p>&gt; Requirements:  </p>
+<p>&gt; - Must work on Windows first  </p>
+<p>&gt; - Use argparse  </p>
+<p>&gt; - Store tasks in tasks.json  </p>
+<p>&gt; - Create virtual environment instructions  </p>
+<p>&gt; - Add comments explaining each file  </p>
+<p>&gt; Do NOT implement advanced features yet.</p>
+
+<p><hr/></p>
+
+<p><h2>Expected Output</h2></p>
+
+<p>Codex should create something like:</p>
+
+<p><pre><code>
+task_manager/
+ ├── main.py
+ ├── storage.py
+ ├── tasks.json (auto-created later)
+ ├── README.md
+ └── requirements.txt (likely empty)
+</code></pre></p>
+
+<p><hr/></p>
+
+<p><h2>What You Must Check</h2></p>
+
+<p>1. Did Codex separate CLI from storage?</p>
+<p>2. Did it comment every function?</p>
+<p>3. Did it avoid premature features?</p>
+<p>4. Did it include Windows PowerShell setup?</p>
+
+<p>If not — correct it.</p>
+
+<p>You are training Codex.</p>
+
+<p><hr/></p>
+
+<p><h2>1.3 What the Code Should Do</h2></p>
+
+<p>Minimum features:</p>
+
+<p><pre><code>
+python main.py --add "Buy milk"
+python main.py --list
+python main.py --complete 1
+</code></pre></p>
+
+<p>That’s it.</p>
+
+<p>No sorting.  </p>
+<p>No scheduling.  </p>
+<p>No AI.</p>
+
+<p><hr/></p>
+
+<p><h2>1.4 Architecture Explanation</h2></p>
+
+<p>We intentionally want this:</p>
+
+<p><pre><code>
+main.py      → CLI parsing
+storage.py   → Read/Write JSON
+tasks.json   → Data
+</code></pre></p>
+
+<p>Why?</p>
+
+<p>Because later:</p>
+
+<ul>
+<li>Agent logic must NOT go inside storage.</li>
+<li>MCP server must NOT go inside main.</li>
+<li>Skills must NOT mutate JSON directly.</li>
+</ul>
+
+<p>Separation now avoids confusion later.</p>
+
+<p><hr/></p>
+
+<p><h2>1.5 Important Engineering Rule</h2></p>
+
+<p>We are building a <strong>clean boundary system</strong>.</p>
+
+<p>Later:</p>
+
+<ul>
+<li>The Agent will call a tool.</li>
+<li>The tool will call storage.</li>
+<li>Storage will touch JSON.</li>
+</ul>
+
+<p>If we mix everything now,</p>
+<p>the architecture collapses.</p>
+
+<p><hr/></p>
+
+<p><h2>1.6 Controlled Prompting Technique</h2></p>
+
+<p>Do NOT say:</p>
+
+<p>&gt; Build a complete task manager with AI planning.</p>
+
+<p>Instead:</p>
+
+<p>Ask in small increments.</p>
+
+<p>Example:</p>
+
+<p>Step 1 prompt:</p>
+<p>&gt; Implement only the --add command.  </p>
+<p>&gt; Include detailed comments.  </p>
+<p>&gt; Do not implement listing yet.</p>
+
+<p>Step 2:</p>
+<p>&gt; Now implement --list.  </p>
+<p>&gt; Explain how indexing works.</p>
+
+<p>Step 3:</p>
+<p>&gt; Now implement --complete by task ID.</p>
+
+<p>This forces:</p>
+<ul>
+<li>Iterative growth</li>
+<li>Clear structure</li>
+<li>No hallucinated architecture</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h2>1.7 Why No Agent Yet?</h2></p>
+
+<p>Because:</p>
+
+<p>If you introduce AI before baseline stability,</p>
+<p>you will never understand what the AI is actually doing.</p>
+
+<p>We want this mental separation:</p>
+
+<p><pre><code>
+Deterministic system
+     +
+Agent layer
+</code></pre></p>
+
+<p>Not:</p>
+
+<p><pre><code>
+AI spaghetti
+</code></pre></p>
+
+<p><hr/></p>
+
+<p><h2>🧠 Conceptual Diagram</h2></p>
+
+<p>System Now:</p>
+
+<p><pre><code>
+User
+  ↓
+CLI (main.py)
+  ↓
+Storage (storage.py)
+  ↓
+tasks.json
+</code></pre></p>
+
+<p>No decision-making loop exists.</p>
+
+<p>Therefore:</p>
+<p>This is NOT an agent.</p>
+
+<p><hr/></p>
+
+<p><h2>🎯 Lesson 1 Checkpoint</h2></p>
+
+<p>Answer:</p>
+
+<p>1. Does this system contain an agent?</p>
+<p>2. Where would an agent sit if added?</p>
+<p>3. Should storage ever call OpenAI?</p>
+<p>4. Is Codex part of runtime?</p>
+
+<p>If you can answer clearly,</p>
+<p>you are ready for Lesson 2.</p>
+
+<p><hr/></p>
+
+<p><h2>🔜 Next Lesson Preview</h2></p>
+
+<p>Lesson 2 will introduce:</p>
+
+<ul>
+<li>A real minimal agent loop</li>
+<li>OpenAI API integration</li>
+<li>Cost control</li>
+<li>Max step limits</li>
+<li>Deterministic guardrails</li>
+</ul>
+
+<p>We will wrap the baseline CLI with an agent layer.</p>
+</body>
+</html>

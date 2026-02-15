@@ -1,0 +1,278 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Lesson 4 — Skills</title>
+<style>
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 40px; line-height: 1.5; }
+pre { background: #f3f3f3; padding: 12px; overflow-x: auto; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+hr { margin: 24px 0; }
+</style>
+</head>
+<body>
+<p><h1>🧠 Tutorial: Codex, Agents, MCP &amp; Skills  </h1></p>
+<p><h1>Lesson 4 — Skills: Structured Intelligence Without Execution</h1></p>
+
+<p><hr/></p>
+
+<p><h2>🎯 Goal of This Lesson</h2></p>
+
+<p>So far we have:</p>
+
+<ul>
+<li>A deterministic system (Lesson 1)</li>
+<li>A real agent loop (Lesson 2)</li>
+<li>Tool decoupling via MCP (Lesson 3)</li>
+</ul>
+
+<p>Now we introduce:</p>
+
+<ul>
+<li>Skills</li>
+<li>Structured prompt templates</li>
+<li>Domain logic injection</li>
+<li>Separation between reasoning and execution</li>
+</ul>
+
+<p>This is the final conceptual pillar.</p>
+
+<p><hr/></p>
+
+<p><h2>4.1 What Is a Skill?</h2></p>
+
+<p>A Skill is:</p>
+
+<ul>
+<li>Structured domain knowledge</li>
+<li>A reasoning template</li>
+<li>A reusable prompt block</li>
+<li>Passive intelligence</li>
+</ul>
+
+<p>It is NOT:</p>
+
+<ul>
+<li>A loop</li>
+<li>A tool executor</li>
+<li>A subprocess</li>
+<li>A storage layer</li>
+</ul>
+
+<p>A Skill modifies HOW the agent thinks — not HOW it executes.</p>
+
+<p><hr/></p>
+
+<p><h2>4.2 Skill vs Tool vs MCP</h2></p>
+
+<p>Let’s separate clearly:</p>
+
+<p>Skill:</p>
+<ul>
+<li>Shapes reasoning</li>
+<li>Influences model output</li>
+<li>Lives inside agent context</li>
+</ul>
+
+<p>Tool:</p>
+<ul>
+<li>Executes deterministic function</li>
+</ul>
+
+<p>MCP:</p>
+<ul>
+<li>Hosts tools behind boundary</li>
+</ul>
+
+<p>Agent:</p>
+<ul>
+<li>Decides when to use Skill or Tool</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h2>4.3 New Architecture Diagram</h2></p>
+
+<p><pre><code>
+User
+  ↓
+Agent Loop
+  ↓
+Skill (prompt injection)
+  ↓
+Model reasoning
+  ↓
+Tool request
+  ↓
+MCP
+  ↓
+Storage
+</code></pre></p>
+
+<p>Skill affects reasoning layer only.</p>
+
+<p><hr/></p>
+
+<p><h2>4.4 Task 1 — Create a Skill File</h2></p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; Create a new folder called skills.</p>
+<p>&gt; Inside it create task_planning_skill.md.</p>
+<p>&gt; The file should:</p>
+<p>&gt; - Define when this skill should be used</p>
+<p>&gt; - Provide structured reasoning rules for task planning</p>
+<p>&gt; - Define constraints (no hallucinated tasks)</p>
+<p>&gt; - Explain how tasks should be prioritized</p>
+<p>&gt; - Not include execution logic</p>
+<p>&gt; - Include comments explaining why this is not a tool</p>
+
+<p>This file is pure text.</p>
+
+<p>No Python.</p>
+
+<p><hr/></p>
+
+<p><h2>4.5 Example Skill Content Structure</h2></p>
+
+<p>The skill might contain:</p>
+
+<ul>
+<li>Goal analysis rules</li>
+<li>Task grouping heuristics</li>
+<li>Time estimation assumptions</li>
+<li>Output formatting instructions</li>
+<li>Constraints against hallucination</li>
+</ul>
+
+<p>Example snippet:</p>
+
+<p><pre><code>
+When user asks to "plan" or "organize":
+- First list existing tasks using tool
+- Group by priority
+- Estimate time realistically
+- Never invent tasks
+</code></pre></p>
+
+<p>Notice:</p>
+
+<p>It tells the agent HOW TO THINK — not HOW TO EXECUTE.</p>
+
+<p><hr/></p>
+
+<p><h2>4.6 Integrate Skill into Agent</h2></p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; Modify agent.py so that before sending messages to OpenAI,</p>
+<p>&gt; it loads task_planning_skill.md and injects it into the system prompt.</p>
+<p>&gt; The skill must:</p>
+<p>&gt; - Not modify loop logic</p>
+<p>&gt; - Not modify tool logic</p>
+<p>&gt; - Only affect prompt construction</p>
+<p>&gt; Add detailed comments explaining separation.</p>
+
+<p><hr/></p>
+
+<p><h2>4.7 What Should NOT Change</h2></p>
+
+<ul>
+<li>Agent loop structure</li>
+<li>Tool calling mechanism</li>
+<li>MCP server</li>
+<li>Storage</li>
+</ul>
+
+<p>Only reasoning changes.</p>
+
+<p><hr/></p>
+
+<p><h2>4.8 Test Case</h2></p>
+
+<p>Run:</p>
+
+<p><pre><code>
+python main.py --goal "Plan my tasks for today"
+</code></pre></p>
+
+<p>Observe:</p>
+
+<p>Without skill:</p>
+<ul>
+<li>Agent may respond loosely.</li>
+</ul>
+
+<p>With skill:</p>
+<ul>
+<li>Agent should:</li>
+</ul>
+<p>  - Call list_tasks first</p>
+<p>  - Group tasks</p>
+<p>  - Avoid inventing new tasks</p>
+<p>  - Stay within constraints</p>
+
+<p>Skill increases reasoning discipline.</p>
+
+<p><hr/></p>
+
+<p><h2>4.9 What This Teaches</h2></p>
+
+<p>You now understand:</p>
+
+<ul>
+<li>Skills live in prompt space</li>
+<li>Tools live in execution space</li>
+<li>MCP lives in boundary space</li>
+<li>Agent lives in control space</li>
+</ul>
+
+<p>These are different dimensions.</p>
+
+<p><hr/></p>
+
+<p><h2>4.10 Enterprise Context</h2></p>
+
+<p>In enterprise environments:</p>
+
+<ul>
+<li>Skills could be centrally versioned</li>
+<li>Skills could be enforced per team</li>
+<li>Skills could be audited</li>
+<li>Skills could be dynamically loaded</li>
+</ul>
+
+<p>But conceptually:</p>
+
+<p>Skill is still prompt logic — not execution.</p>
+
+<p><hr/></p>
+
+<p><h2>🎯 Lesson 4 Checkpoint</h2></p>
+
+<p>Answer:</p>
+
+<p>1. Does a Skill execute code?</p>
+<p>2. Does a Skill own the loop?</p>
+<p>3. Does MCP know about Skills?</p>
+<p>4. Where is a Skill injected?</p>
+<p>5. Can multiple agents share a Skill?</p>
+
+<p>If you answer correctly, you now understand the full stack.</p>
+
+<p><hr/></p>
+
+<p><h2>🔜 Next Lesson Preview</h2></p>
+
+<p>Lesson 5 will:</p>
+
+<ul>
+<li>Add a minimal GUI (Qt or lightweight alternative)</li>
+<li>Show architecture unchanged</li>
+<li>Demonstrate that UI is another boundary</li>
+<li>Reinforce separation principles</li>
+</ul>
+
+<p>We are approaching full integration.</p>
+</body>
+</html>
