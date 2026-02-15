@@ -1,0 +1,272 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Lesson 3 — MCP Decoupling</title>
+<style>
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 40px; line-height: 1.5; }
+pre { background: #f3f3f3; padding: 12px; overflow-x: auto; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+hr { margin: 24px 0; }
+</style>
+</head>
+<body>
+<p><h1>🧠 Tutorial: Codex, Agents, MCP &amp; Skills  </h1></p>
+<p><h1>Lesson 3 — Decoupling with a Minimal MCP Server</h1></p>
+
+<p><hr/></p>
+
+<p><h2>🎯 Goal of This Lesson</h2></p>
+
+<p>In Lesson 2, our agent called local Python functions directly via tools.py.</p>
+
+<p>Now we will:</p>
+
+<ul>
+<li>Move tools behind a minimal MCP-style server</li>
+<li>Keep the agent unchanged</li>
+<li>Prove architectural decoupling</li>
+<li>Understand why MCP exists</li>
+</ul>
+
+<p>This is where abstraction becomes real.</p>
+
+<p><hr/></p>
+
+<p><h2>3.1 What Changes — and What Does Not</h2></p>
+
+<p>What stays the same:</p>
+
+<ul>
+<li>agent.py loop</li>
+<li>max_steps guardrail</li>
+<li>OpenAI API integration</li>
+<li>storage.py</li>
+<li>tasks.json</li>
+</ul>
+
+<p>What changes:</p>
+
+<p>Instead of:</p>
+
+<p><pre><code>
+Agent → tools.py → storage.py
+</code></pre></p>
+
+<p>We will now have:</p>
+
+<p><pre><code>
+Agent → MCP Client → MCP Server → storage.py
+</code></pre></p>
+
+<p>The agent will not know the difference.</p>
+
+<p><hr/></p>
+
+<p><h2>3.2 Why MCP Exists</h2></p>
+
+<p>MCP (Model Context Protocol) exists to:</p>
+
+<ul>
+<li>Decouple tools from agent runtime</li>
+<li>Standardize tool discovery</li>
+<li>Allow tools to live in separate processes</li>
+<li>Enable future remote / enterprise integrations</li>
+</ul>
+
+<p>In our local example, this may feel unnecessary.</p>
+
+<p>That is intentional.</p>
+
+<p>We are learning architecture, not chasing convenience.</p>
+
+<p><hr/></p>
+
+<p><h2>3.3 Minimal MCP Design (Local Version)</h2></p>
+
+<p>We will implement:</p>
+
+<ul>
+<li>A small Python process acting as MCP server</li>
+<li>Communication over stdin/stdout (JSON messages)</li>
+<li>Tool registry</li>
+<li>Deterministic execution</li>
+</ul>
+
+<p>No networking.</p>
+<p>No async complexity.</p>
+<p>No enterprise features.</p>
+
+<p><hr/></p>
+
+<p><h2>3.4 New Architecture Diagram</h2></p>
+
+<p><pre><code>
+main.py
+   ↓
+agent.py
+   ↓
+mcp_client.py
+   ↓ (JSON over stdio)
+mcp_server.py  (separate process)
+   ↓
+storage.py
+   ↓
+tasks.json
+</code></pre></p>
+
+<p>Clear separation.</p>
+
+<p><hr/></p>
+
+<p><h2>3.5 Task 1 — Create MCP Server</h2></p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; Create mcp_server.py.  </p>
+<p>&gt; Requirements:  </p>
+<p>&gt; - Runs as a standalone Python process  </p>
+<p>&gt; - Reads JSON messages from stdin  </p>
+<p>&gt; - Writes JSON responses to stdout  </p>
+<p>&gt; - Supports:  </p>
+<p>&gt;     - add_task  </p>
+<p>&gt;     - list_tasks  </p>
+<p>&gt;     - complete_task  </p>
+<p>&gt; - Calls storage.py internally  </p>
+<p>&gt; - Includes detailed comments explaining:  </p>
+<p>&gt;     - Message format  </p>
+<p>&gt;     - Tool dispatch  </p>
+<p>&gt;     - Why this is decoupled from the agent  </p>
+
+<p>Keep it synchronous and simple.</p>
+
+<p><hr/></p>
+
+<p><h2>Expected MCP Message Format</h2></p>
+
+<p>Request:</p>
+
+<p><pre><code>
+{
+  "tool": "add_task",
+  "arguments": { "text": "Buy milk" }
+}
+</code></pre></p>
+
+<p>Response:</p>
+
+<p><pre><code>
+{
+  "status": "ok",
+  "result": "..."
+}
+</code></pre></p>
+
+<p>Keep it deterministic.</p>
+
+<p><hr/></p>
+
+<p><h2>3.6 Task 2 — Create MCP Client</h2></p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; Create mcp_client.py.  </p>
+<p>&gt; Requirements:  </p>
+<p>&gt; - Starts mcp_server.py as subprocess  </p>
+<p>&gt; - Sends JSON requests  </p>
+<p>&gt; - Receives JSON responses  </p>
+<p>&gt; - Handles errors gracefully  </p>
+<p>&gt; - Explains:  </p>
+<p>&gt;     - Why subprocess boundary matters  </p>
+<p>&gt;     - How this simulates real MCP architecture  </p>
+
+<p><hr/></p>
+
+<p><h2>3.7 Modify Agent to Use MCP</h2></p>
+
+<p>Now ask Codex:</p>
+
+<p>&gt; Modify agent.py so that tool calls go through mcp_client.py instead of calling tools.py directly.  </p>
+<p>&gt; Do not modify the agent loop structure.  </p>
+<p>&gt; Only replace the execution layer.  </p>
+<p>&gt; Add comments explaining why the agent remains unchanged.  </p>
+
+<p><hr/></p>
+
+<p><h2>Critical Insight</h2></p>
+
+<p>If done correctly:</p>
+
+<p>You will NOT change:</p>
+
+<ul>
+<li>Loop logic</li>
+<li>Stop conditions</li>
+<li>Token handling</li>
+<li>Step counter</li>
+</ul>
+
+<p>Only execution plumbing changes.</p>
+
+<p>That is architectural separation.</p>
+
+<p><hr/></p>
+
+<p><h2>3.8 What This Teaches You</h2></p>
+
+<p>You now understand:</p>
+
+<ul>
+<li>Agent ≠ Tool executor</li>
+<li>MCP server is passive</li>
+<li>Agent owns the loop</li>
+<li>Tools live behind boundaries</li>
+</ul>
+
+<p>This is professional architecture.</p>
+
+<p><hr/></p>
+
+<p><h2>3.9 Enterprise What-If</h2></p>
+
+<p>If we had enterprise features:</p>
+
+<ul>
+<li>MCP server could be remote</li>
+<li>Auth + policy layer could be enforced</li>
+<li>Multiple agents could share tool registry</li>
+<li>Observability &amp; tracing could be centralized</li>
+</ul>
+
+<p>But the mental model remains identical.</p>
+
+<p><hr/></p>
+
+<p><h2>🎯 Lesson 3 Checkpoint</h2></p>
+
+<p>Answer:</p>
+
+<p>1. Did the agent loop change?  </p>
+<p>2. Who executes tools now?  </p>
+<p>3. Does the MCP server know about OpenAI?  </p>
+<p>4. Can multiple agents reuse the same MCP server?  </p>
+<p>5. Is storage aware of agent or MCP?  </p>
+
+<p>If you answer clearly, you now understand decoupling.</p>
+
+<p><hr/></p>
+
+<p><h2>🔜 Next Lesson Preview</h2></p>
+
+<p>Lesson 4 will introduce:</p>
+
+<ul>
+<li>Skills  </li>
+<li>Structured prompt templates  </li>
+<li>Domain logic injection  </li>
+<li>Separation between reasoning and execution  </li>
+</ul>
+
+<p>You will see how skills differ from tools and MCP.</p>
+</body>
+</html>

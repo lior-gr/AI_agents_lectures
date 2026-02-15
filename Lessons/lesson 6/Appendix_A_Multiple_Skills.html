@@ -1,0 +1,167 @@
+<!doctype html><html><head><meta charset='utf-8'/><title>Appendix A — Multiple Skills</title><style>body{font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;margin:40px;line-height:1.5}pre{background:#f3f3f3;padding:12px;overflow-x:auto}code{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}hr{margin:24px 0}</style></head><body><p><h1>Appendix A — Multiple Skills and Skill Selection</h1></p>
+
+<p><hr/></p>
+
+<p><h2>A.1 Why multiple skills?</h2></p>
+
+<p>Real agents rarely run with a single skill.</p>
+
+<p>Instead, you typically have:</p>
+
+<ul>
+<li>One or more domain skills (task planning, time estimation)</li>
+<li>One or more formatting skills (output templates)</li>
+<li>One or more safety/constraints skills (no hallucinated facts, cost limits)</li>
+<li>One or more workflow skills (always list tasks before planning, always ask for confirmation)</li>
+</ul>
+
+<p>The goal is not "more prompt".</p>
+<p>The goal is: <strong>separation of instruction concerns</strong>, like code modules.</p>
+
+<p><hr/></p>
+
+<p><h2>A.2 Skill patterns</h2></p>
+
+<p><h3>Pattern 1: Always-on skills</h3></p>
+
+<p>These are always injected:</p>
+
+<ul>
+<li>"Do not invent tasks"</li>
+<li>"Prefer tools over guesses"</li>
+<li>"Keep answers concise"</li>
+<li>"Respect max_steps and budget"</li>
+</ul>
+
+<p>Think of them as global policies.</p>
+
+<p><h3>Pattern 2: Conditional skills</h3></p>
+
+<p>Injected only when the user intent matches:</p>
+
+<ul>
+<li>Planning skill when user says "plan", "organize", "schedule"</li>
+<li>Reporting skill when user says "summarize", "status"</li>
+<li>Troubleshooting skill when user says "debug", "why is it failing"</li>
+</ul>
+
+<p><h3>Pattern 3: Layered skills</h3></p>
+
+<p>You stack skills in a specific order:</p>
+
+<p>1. Global policy skill</p>
+<p>2. Domain skill</p>
+<p>3. Output format skill</p>
+
+<p>Order matters because later instructions can override earlier ones.</p>
+
+<p><hr/></p>
+
+<p><h2>A.3 Minimal "Skill Router" design (deterministic)</h2></p>
+
+<p>We will keep this simple and predictable.</p>
+
+<p>Create:</p>
+
+<ul>
+<li>`skills/always_on.md`</li>
+<li>`skills/task_planning.md`</li>
+<li>`skills/status_reporting.md`</li>
+<li>`skills/output_format.md`</li>
+</ul>
+
+<p>Then implement a function:</p>
+
+<ul>
+<li>Reads always-on skill every time</li>
+<li>Selects optional skills by keyword rules</li>
+<li>Concatenates selected skill texts into the system prompt</li>
+</ul>
+
+<p>Example selection rules:</p>
+
+<ul>
+<li>If goal contains any of: "plan", "organize", "schedule" -&gt; include task_planning</li>
+<li>If goal contains any of: "status", "summary", "report" -&gt; include status_reporting</li>
+<li>If goal contains any of: "pretty", "table", "markdown" -&gt; include output_format</li>
+</ul>
+
+<p>This is not "AI deciding which skills to use".</p>
+<p>This is deterministic routing. Easy to debug.</p>
+
+<p><hr/></p>
+
+<p><h2>A.4 Task — Add multiple skills to the project</h2></p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; Create these files under skills/:</p>
+<p>&gt; - always_on.md</p>
+<p>&gt; - task_planning.md</p>
+<p>&gt; - status_reporting.md</p>
+<p>&gt; - output_format.md</p>
+<p>&gt; Each file should clearly state:</p>
+<p>&gt; - When it applies</p>
+<p>&gt; - What it changes about reasoning</p>
+<p>&gt; - What it must never do (no execution)</p>
+<p>&gt; Use concise bullet rules.</p>
+<p>&gt; Add a short comment block at the top: "This is a skill, not a tool."</p>
+
+<p>Then ask Codex:</p>
+
+<p>&gt; In agent.py, implement a function load_skills(goal: str) -&gt; str that:</p>
+<p>&gt; - Always loads skills/always_on.md</p>
+<p>&gt; - Conditionally loads other skills using deterministic keyword rules</p>
+<p>&gt; - Returns a single concatenated string to inject into the system prompt</p>
+<p>&gt; Requirements:</p>
+<p>&gt; - Do not change the agent loop</p>
+<p>&gt; - Do not change tool execution</p>
+<p>&gt; - Add comments explaining ordering and why routing is deterministic</p>
+
+<p><hr/></p>
+
+<p><h2>A.5 Expected behavior test</h2></p>
+
+<p>1) Add tasks first (CLI or GUI).</p>
+
+<p>2) Run:</p>
+
+<p><pre><code>
+python main.py --goal "Give me a status report of my tasks"
+</code></pre></p>
+
+<p>Expected:</p>
+
+<ul>
+<li>Agent calls list_tasks</li>
+<li>Agent produces a structured summary (status_reporting skill)</li>
+<li>No invented tasks</li>
+</ul>
+
+<p>3) Run:</p>
+
+<p><pre><code>
+python main.py --goal "Plan my tasks for today in a markdown table"
+</code></pre></p>
+
+<p>Expected:</p>
+
+<ul>
+<li>Agent calls list_tasks</li>
+<li>Agent proposes a plan (task_planning skill)</li>
+<li>Output in table style (output_format skill)</li>
+<li>Still no invented tasks (always_on skill)</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h2>A.6 Checkpoint</h2></p>
+
+<p>Answer:</p>
+
+<p>1. Are skills executed or injected?</p>
+<p>2. Is the skill router deterministic or model-driven?</p>
+<p>3. Does MCP server know which skills were used?</p>
+<p>4. If output_format skill is removed, does planning still work?</p>
+
+<p>If yes, you now understand multi-skill composition.</p></body></html>

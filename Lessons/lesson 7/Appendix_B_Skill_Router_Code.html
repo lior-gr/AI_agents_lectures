@@ -1,0 +1,201 @@
+<!doctype html><html><head><meta charset='utf-8'/><title>Appendix B — Skill Router Code</title><style>body{font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;margin:40px;line-height:1.5}pre{background:#f3f3f3;padding:12px;overflow-x:auto}code{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}hr{margin:24px 0}</style></head><body><p><h1>Appendix B — Concrete Multi-Skill Router Example (load_skills)</h1></p>
+
+<p><hr/></p>
+
+<p><h2>B.1 Goal</h2></p>
+
+<p>In Appendix A we described multiple skills and deterministic selection.</p>
+
+<p>This appendix makes it concrete with:</p>
+
+<ul>
+<li>A recommended `skills/` folder layout</li>
+<li>A small deterministic router: `load_skills(goal: str) -&gt; str`</li>
+<li>Ordering rules</li>
+<li>A tiny test matrix you can run manually</li>
+</ul>
+
+<p>This is intentionally simple and debug-friendly.</p>
+
+<p><hr/></p>
+
+<p><h2>B.2 Recommended `skills/` layout</h2></p>
+
+<p><pre><code>
+skills/
+  always_on.md
+  task_planning.md
+  status_reporting.md
+  output_format.md
+</code></pre></p>
+
+<p>Notes:</p>
+
+<ul>
+<li>Each file is plain text.</li>
+<li>No code execution.</li>
+<li>Each file should start with a short header comment like:</li>
+</ul>
+<p>  "This is a skill, not a tool."</p>
+
+<p><hr/></p>
+
+<p><h2>B.3 Deterministic routing rules</h2></p>
+
+<p>Use explicit keyword triggers so behavior is predictable.</p>
+
+<p>Example keyword sets:</p>
+
+<ul>
+<li>task_planning:  "plan", "organize", "schedule", "today", "this week"</li>
+<li>status_reporting: "status", "report", "summary", "summarize"</li>
+<li>output_format: "table", "markdown", "csv", "json", "pretty"</li>
+</ul>
+
+<p>You can refine these later, but start small.</p>
+
+<p><hr/></p>
+
+<p><h2>B.4 Ordering rules (important)</h2></p>
+
+<p>When combining multiple skills into a single injected block, order matters.</p>
+
+<p>Recommended ordering:</p>
+
+<p>1) `always_on.md` (global policy)</p>
+<p>2) Domain skill (task_planning or status_reporting)</p>
+<p>3) Output formatting (output_format)</p>
+
+<p>Reason:</p>
+
+<ul>
+<li>Global constraints should apply to everything.</li>
+<li>Domain rules should shape what the model decides to do.</li>
+<li>Output format should shape presentation last.</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h2>B.5 Example code: `load_skills(goal: str) -&gt; str`</h2></p>
+
+<p>This is a concrete implementation you can ask Codex to add to `agent.py`.</p>
+
+<p>It does not change the agent loop.</p>
+<p>It only affects prompt construction.</p>
+
+<p><pre><code>python
+import os
+from typing import List
+
+
+def _read_text_file(path: str) -&gt; str:
+    """Read a UTF-8 text file. Return empty string if missing."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        return ""
+
+
+def _contains_any(text: str, keywords: List[str]) -&gt; bool:
+    t = text.lower()
+    return any(k in t for k in keywords)
+
+
+def load_skills(goal: str, skills_dir: str = "skills") -&gt; str:
+    """Deterministically select skills based on the goal text.
+
+    Ordering:
+      1) always_on
+      2) domain skill(s)
+      3) output_format
+
+    Returns:
+      A single concatenated string to inject into the system prompt.
+    """
+
+    selected_paths: List[str] = []
+
+    # 1) Always-on global policy skill
+    selected_paths.append(os.path.join(skills_dir, "always_on.md"))
+
+    # 2) Domain skills
+    if _contains_any(goal, ["plan", "organize", "schedule", "today", "this week"]):
+        selected_paths.append(os.path.join(skills_dir, "task_planning.md"))
+
+    if _contains_any(goal, ["status", "report", "summary", "summarize"]):
+        selected_paths.append(os.path.join(skills_dir, "status_reporting.md"))
+
+    # 3) Output format skill (presentation rules)
+    if _contains_any(goal, ["table", "markdown", "csv", "json", "pretty"]):
+        selected_paths.append(os.path.join(skills_dir, "output_format.md"))
+
+    # Read and concatenate, skipping missing/empty files
+    blocks: List[str] = []
+    for p in selected_paths:
+        txt = _read_text_file(p)
+        if txt:
+            blocks.append(txt)
+
+    # Separator is plain ASCII to avoid terminal and toolchain surprises
+    return "\n\n---\n\n".join(blocks)
+</code></pre></p>
+
+<p>Integration hint (high level):</p>
+
+<ul>
+<li>Call `skills_text = load_skills(goal)`</li>
+<li>Put `skills_text` inside the system message, after your base system policy, before the user goal</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h2>B.6 Tiny manual test matrix</h2></p>
+
+<p>Create a few goals and verify which skills are selected.</p>
+
+<p>| Goal | Expected skills |</p>
+<p>|---|---|</p>
+<p>| "Plan my tasks for today" | always_on + task_planning |</p>
+<p>| "Give me a status report of my tasks" | always_on + status_reporting |</p>
+<p>| "Plan my tasks for today in a markdown table" | always_on + task_planning + output_format |</p>
+<p>| "Summarize my tasks in JSON" | always_on + status_reporting + output_format |</p>
+<p>| "List tasks" | always_on (and likely no domain skill) |</p>
+
+<p>How to validate quickly:</p>
+
+<ul>
+<li>Add a debug print in agent.py (temporarily) to print selected skill file names.</li>
+<li>Remove the debug print after validation.</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h2>B.7 Common mistakes</h2></p>
+
+<p>1) Letting the model decide which skills to load  </p>
+<p>   - That makes behavior hard to debug.</p>
+
+<p>2) Putting tool instructions inside skills  </p>
+<p>   - Skills should describe reasoning and constraints, not execution details.</p>
+
+<p>3) Mixing skill logic into MCP server  </p>
+<p>   - MCP should not know prompt content.</p>
+
+<p>4) Changing the agent loop when adding skills  </p>
+<p>   - Skills are reasoning injection only.</p>
+
+<p><hr/></p>
+
+<p><h2>B.8 Checkpoint</h2></p>
+
+<p>Answer:</p>
+
+<p>1) Is `load_skills` deterministic or model-driven?  </p>
+<p>2) Does `load_skills` execute tools?  </p>
+<p>3) Does MCP server need to know about skills?  </p>
+<p>4) If you remove output_format.md, does planning still work?</p>
+
+<p>If you can answer clearly, you have multi-skill routing nailed.</p></body></html>

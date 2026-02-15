@@ -1,0 +1,338 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Lesson 2 — Minimal Agent Loop</title>
+<style>
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 40px; line-height: 1.5; }
+pre { background: #f3f3f3; padding: 12px; overflow-x: auto; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+hr { margin: 24px 0; }
+</style>
+</head>
+<body>
+<p><h1>🧠 Tutorial: Codex, Agents, MCP &amp; Skills  </h1></p>
+<p><h1>Lesson 2 — Introducing a Real Minimal Agent Loop</h1></p>
+
+<p><hr/></p>
+
+<p><h2>🎯 Goal of This Lesson</h2></p>
+
+<p>We now transform the deterministic CLI system into something that contains:</p>
+
+<ul>
+<li>A real agent loop</li>
+<li>OpenAI API integration</li>
+<li>Controlled iteration</li>
+<li>Cost awareness</li>
+<li>Strict guardrails</li>
+</ul>
+
+<p>We will not break the baseline system.</p>
+
+<p>We will wrap it.</p>
+
+<p><hr/></p>
+
+<p><h2>2.1 What We Are Adding</h2></p>
+
+<p>Current system:</p>
+
+<p><pre><code>
+User → CLI → Storage → JSON
+</code></pre></p>
+
+<p>New system:</p>
+
+<p><pre><code>
+User
+  ↓
+Agent Loop
+  ↓
+Tool Call (local function)
+  ↓
+Storage → JSON
+</code></pre></p>
+
+<p>Important:</p>
+
+<p>The agent does NOT replace storage.  </p>
+<p>It sits above it.</p>
+
+<p><hr/></p>
+
+<p><h2>2.2 What Is an Agent in This Context?</h2></p>
+
+<p>Minimal definition for this lesson:</p>
+
+<p>An agent is:</p>
+
+<p>1. A loop</p>
+<p>2. With a goal</p>
+<p>3. That can call tools</p>
+<p>4. That decides when to stop</p>
+
+<p>We will implement:</p>
+
+<ul>
+<li>Max 5 steps</li>
+<li>No recursive self-prompting</li>
+<li>Deterministic tool whitelist</li>
+<li>Strict token budget awareness</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h2>2.3 Budget Awareness</h2></p>
+
+<p>You allowed up to $10 total.</p>
+
+<p>We will:</p>
+<ul>
+<li>Use a small model</li>
+<li>Limit max tokens</li>
+<li>Log usage</li>
+<li>Avoid multi-turn reasoning explosions</li>
+</ul>
+
+<p>Expected cost for this lesson:</p>
+<p>Well under $1.</p>
+
+<p><hr/></p>
+
+<p><h2>2.4 New Architecture Diagram</h2></p>
+
+<p><pre><code>
+main.py
+   ↓
+agent.py
+   ↓
+tools.py
+   ↓
+storage.py
+   ↓
+tasks.json
+</code></pre></p>
+
+<p>Clear layering.</p>
+
+<p>No shortcuts.</p>
+
+<p><hr/></p>
+
+<p><h2>2.5 Task 1 — Ask Codex to Create Agent Skeleton</h2></p>
+
+<p>Open your project.</p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; Create a new file agent.py.  </p>
+<p>&gt; Implement a minimal agent loop that:  </p>
+<p>&gt; - Accepts a user goal string  </p>
+<p>&gt; - Calls OpenAI chat completion API  </p>
+<p>&gt; - Supports tool calling  </p>
+<p>&gt; - Has max_steps=5  </p>
+<p>&gt; - Logs each step  </p>
+<p>&gt; - Does not exceed 800 tokens per call  </p>
+<p>&gt; - Includes detailed comments explaining:  </p>
+<p>&gt;     - Where the loop is  </p>
+<p>&gt;     - Where tool calls are processed  </p>
+<p>&gt;     - Where stopping conditions are enforced  </p>
+<p>&gt; Do not implement tools yet.  </p>
+<p>&gt; Just stub them.</p>
+
+<p><hr/></p>
+
+<p><h2>Expected Output</h2></p>
+
+<p>Codex should create:</p>
+
+<p><pre><code>
+agent.py
+</code></pre></p>
+
+<p>Containing:</p>
+
+<ul>
+<li>A function like `run_agent(goal: str)`</li>
+<li>A loop</li>
+<li>A message history list</li>
+<li>Tool call detection logic</li>
+<li>Stop condition</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h2>2.6 What You Must Inspect Carefully</h2></p>
+
+<p>Look for:</p>
+
+<p>1. Where is the loop?</p>
+<p>2. Where are steps counted?</p>
+<p>3. Where does it stop?</p>
+<p>4. Is the OpenAI key read from environment variable?</p>
+<p>5. Is temperature low?</p>
+<p>6. Are tool schemas defined?</p>
+
+<p>If any of these are sloppy — fix them.</p>
+
+<p><hr/></p>
+
+<p><h2>2.7 Add Tool Layer (Local Only)</h2></p>
+
+<p>Now ask Codex:</p>
+
+<p>&gt; Create tools.py.  </p>
+<p>&gt; Define tool schemas for:  </p>
+<p>&gt; - add_task(text: str)  </p>
+<p>&gt; - list_tasks()  </p>
+<p>&gt; - complete_task(task_id: int)  </p>
+<p>&gt; These must call existing storage.py functions.  </p>
+<p>&gt; Do not put business logic inside the agent.  </p>
+<p>&gt; Add detailed comments explaining separation of concerns.</p>
+
+<p>Important principle:</p>
+
+<p>The agent never edits JSON.</p>
+
+<p>It only calls tools.</p>
+
+<p><hr/></p>
+
+<p><h2>2.8 Connect Agent to CLI</h2></p>
+
+<p>Modify `main.py`:</p>
+
+<p>Add a new command:</p>
+
+<p><pre><code>
+python main.py --goal "Plan my tasks for today"
+</code></pre></p>
+
+<p>Instead of calling storage directly, this should:</p>
+
+<p><pre><code>
+agent.run_agent(goal)
+</code></pre></p>
+
+<p>But:</p>
+
+<p>Keep old deterministic commands working.</p>
+
+<p>We are adding a layer, not replacing it.</p>
+
+<p><hr/></p>
+
+<p><h2>2.9 What the Agent Should Be Able to Do</h2></p>
+
+<p>Example interaction:</p>
+
+<p>User:</p>
+
+<p><pre><code>
+python main.py --goal "Add buy milk and then show me all tasks"
+</code></pre></p>
+
+<p>Agent:</p>
+
+<p>1. Decides to call add_task  </p>
+<p>2. Decides to call list_tasks  </p>
+<p>3. Stops</p>
+
+<p>That’s it.</p>
+
+<p>No planning intelligence yet.</p>
+
+<p>Just loop + tool execution.</p>
+
+<p><hr/></p>
+
+<p><h2>2.10 Agent Loop Diagram</h2></p>
+
+<p><pre><code>
+goal = user input
+
+for step in range(max_steps):
+    call model
+    if model requests tool:
+        execute tool
+        append tool result
+    else:
+        break
+
+return final answer
+</code></pre></p>
+
+<p>If your code does not look like this —  </p>
+<p>you do not have a real agent.</p>
+
+<p><hr/></p>
+
+<p><h2>2.11 Guardrails</h2></p>
+
+<p>You must ensure:</p>
+
+<ul>
+<li>max_steps hard limited  </li>
+<li>No while True loops  </li>
+<li>No recursive self calls  </li>
+<li>Tool whitelist  </li>
+<li>Graceful failure if tool unknown  </li>
+</ul>
+
+<p>This prevents runaway costs.</p>
+
+<p><hr/></p>
+
+<p><h2>2.12 Where Codex Ends and Runtime Begins</h2></p>
+
+<p>Codex:</p>
+<ul>
+<li>Writes agent.py</li>
+</ul>
+
+<p>Runtime:</p>
+<ul>
+<li>Executes agent.py</li>
+</ul>
+
+<p>This separation is critical.</p>
+
+<p>Codex is not in the execution loop.</p>
+
+<p><hr/></p>
+
+<p><h2>🎯 Lesson 2 Checkpoint</h2></p>
+
+<p>Answer clearly:</p>
+
+<p>1. Who owns the loop?  </p>
+<p>2. Who executes tools?  </p>
+<p>3. Where does token usage occur?  </p>
+<p>4. Can MCP server replace tools.py?  </p>
+<p>5. Does storage know that an agent exists?  </p>
+
+<p>If these are clear,  </p>
+<p>you understand the difference between:</p>
+
+<ul>
+<li>Deterministic app  </li>
+<li>Agent-wrapped app  </li>
+</ul>
+
+<p><hr/></p>
+
+<p><h2>🔜 Next Lesson Preview</h2></p>
+
+<p>Lesson 3 will:</p>
+
+<ul>
+<li>Replace local tools with a minimal MCP server  </li>
+<li>Keep agent unchanged  </li>
+<li>Demonstrate decoupling  </li>
+<li>Show why MCP exists  </li>
+</ul>
+
+<p>You will see architecture separation become real.</p>
+</body>
+</html>

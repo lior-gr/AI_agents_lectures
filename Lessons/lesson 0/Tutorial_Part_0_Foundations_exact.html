@@ -1,0 +1,496 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Tutorial Part 0 — Foundations & Mental Models</title>
+<style>
+body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 40px; line-height: 1.45; }
+pre { background: #f3f3f3; padding: 12px; overflow-x: auto; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+table { border-collapse: collapse; margin: 12px 0; }
+th, td { border: 1px solid #ccc; padding: 6px 10px; vertical-align: top; }
+blockquote { border-left: 4px solid #ccc; margin: 12px 0; padding: 6px 12px; }
+hr { margin: 18px 0; }
+img.diagram { max-width: 100%; height: auto; border: 1px solid #ddd; }
+.smallnote { font-size: 0.95em; opacity: 0.9; }
+</style>
+</head>
+<body>
+<p><h1>🧠 Tutorial: Codex, Agents, MCP &amp; Skills  </h1></p>
+<p><h2>Part 0 — Foundations &amp; Mental Models</h2></p>
+
+<p>Welcome to the lab.</p>
+
+<p>This tutorial will teach you:</p>
+
+<ul>
+<li>What Codex actually is</li>
+<li>What an Agent really is</li>
+<li>What a Skill is (and is not)</li>
+<li>What an MCP server is</li>
+<li>How these components interact</li>
+<li>How they <strong>must not</strong> interact</li>
+</ul>
+
+<p>We begin with mental clarity before touching code.</p>
+
+<p><hr/></p>
+
+<p><h1>0.1 The Vocabulary</h1></p>
+
+<p>Let’s define every term carefully.</p>
+
+<p><hr/></p>
+
+<p><h2>1️⃣ Codex Plugin (VS Code Extension)</h2></p>
+
+<p><strong>What it is:</strong></p>
+<p>An AI-powered coding assistant integrated into VS Code.</p>
+
+<p><strong>What it does:</strong></p>
+<ul>
+<li>Reads your workspace</li>
+<li>Writes / edits code</li>
+<li>Runs terminal commands (if allowed)</li>
+<li>Can call tools</li>
+<li>Can follow project instructions (`AGENTS.md`)</li>
+<li>Can use Skills</li>
+<li>Can connect to MCP servers</li>
+</ul>
+
+<p><strong>What it is NOT:</strong></p>
+<ul>
+<li>It is not your backend.</li>
+<li>It is not your production runtime.</li>
+<li>It is not your deployed application.</li>
+<li>It is not your agent logic.</li>
+</ul>
+
+<p>It is a *developer assistant agent*.</p>
+
+<p><hr/></p>
+
+<p><h3>Conceptual View</h3></p>
+
+<p>image_group{"layout":"carousel","aspect_ratio":"1:1","query":["software architecture layers diagram simple","developer assistant ai architecture diagram","ai coding assistant interacting with codebase diagram","vs code ai assistant architecture conceptual diagram"],"num_per_query":1}</p>
+
+<p>Mental abstraction:</p>
+
+<p><pre><code>
+You (human)
+   ↓
+Codex (AI coding assistant)
+   ↓
+Your project files
+   ↓
+Your runtime application
+</code></pre></p>
+
+<p>Codex helps build the system.  </p>
+<p>It is not the system.</p>
+
+<p><hr/></p>
+
+<p><h2>2️⃣ Agent</h2></p>
+
+<p>An <strong>Agent</strong> is a system that:</p>
+
+<ul>
+<li>Has a goal</li>
+<li>Decides what to do next</li>
+<li>Calls tools</li>
+<li>Observes results</li>
+<li>Repeats until finished</li>
+</ul>
+
+<p>This is crucial:</p>
+
+<p><blockquote>An agent owns the decision loop.</blockquote></p>
+
+<p><hr/></p>
+
+<p><h3>Agent Loop (Core Concept)</h3></p>
+
+<p>image_group{"layout":"carousel","aspect_ratio":"1:1","query":["agent loop diagram plan act observe decide","ai agent control loop diagram","reinforcement learning loop simple diagram","autonomous agent architecture minimal diagram"],"num_per_query":1}</p>
+
+<p>Minimal structure:</p>
+
+<p><pre><code>
+Goal
+  ↓
+Plan
+  ↓
+Act (call tool)
+  ↓
+Observe result
+  ↓
+Decide
+  ↓
+Repeat or Stop
+</code></pre></p>
+
+<p>Without this loop, you do not have an agent.</p>
+
+<p><hr/></p>
+
+<p><h2>3️⃣ Skill</h2></p>
+
+<p>A <strong>Skill</strong> is:</p>
+
+<ul>
+<li>A reusable capability</li>
+<li>A structured instruction bundle</li>
+<li>Domain knowledge</li>
+<li>Templates + rules</li>
+</ul>
+
+<p>It does not:</p>
+<ul>
+<li>Loop</li>
+<li>Decide autonomously</li>
+<li>Execute tools directly</li>
+</ul>
+
+<p>It is passive.</p>
+
+<p>Think:</p>
+
+<p><blockquote>A skill is expertise.</blockquote></p>
+<p><blockquote>An agent is behavior.</blockquote></p>
+
+<p><hr/></p>
+
+<p><h3>Mental Model</h3></p>
+
+<p><pre><code>
+Agent → decides when to use → Skill
+Skill → provides structured domain logic
+</code></pre></p>
+
+<p><hr/></p>
+
+<p><h2>4️⃣ MCP Server (Model Context Protocol Server)</h2></p>
+
+<p>An <strong>MCP server</strong> is:</p>
+
+<ul>
+<li>A tool provider</li>
+<li>A resource provider</li>
+<li>A passive capability host</li>
+<li>A standardized bridge between models and systems</li>
+</ul>
+
+<p>It does not:</p>
+<ul>
+<li>Have goals</li>
+<li>Plan</li>
+<li>Loop</li>
+<li>Make decisions</li>
+</ul>
+
+<p>It waits for requests.</p>
+
+<p><hr/></p>
+
+<p><h3>Conceptual Separation</h3></p>
+
+<p>image_group{"layout":"carousel","aspect_ratio":"1:1","query":["microservice tool server architecture diagram simple","plugin server architecture diagram ai tools","model context protocol conceptual diagram","tool provider server architecture simple clean diagram"],"num_per_query":1}</p>
+
+<p>Think of it as:</p>
+
+<p><pre><code>
+Agent → calls → MCP Server → executes tool → returns result
+</code></pre></p>
+
+<p><hr/></p>
+
+<p><h1>0.2 The Stack — Who Does What?</h1></p>
+
+<p>Let’s layer everything.</p>
+
+<p><hr/></p>
+
+<p><h2>Full Conceptual Stack</h2></p>
+
+<p>image_group{"layout":"carousel","aspect_ratio":"1:1","query":["layered ai architecture diagram agent mcp tools","software stack diagram ai agent tools mcp clean","agent tools skills layered architecture illustration","ai application architecture layered diagram minimal modern"],"num_per_query":1}</p>
+
+<p>Mental stack:</p>
+
+<p><pre><code>
+Human
+  ↓
+Codex (development assistant)
+  ↓
+Your Agent (runtime logic)
+  ↓
+Skills (domain knowledge)
+  ↓
+MCP Servers (tool providers)
+  ↓
+Tools (filesystem, DB, subprocess, APIs)
+</code></pre></p>
+
+<p><hr/></p>
+
+<p><h1>0.3 Interaction Rules (Very Important)</h1></p>
+
+<p>Let’s formalize what can and cannot happen.</p>
+
+<p><hr/></p>
+
+<p><h2>✔ Allowed Interactions</h2></p>
+
+<table>
+<thead><tr>
+<th>Component</th>
+<th>Can Interact With</th>
+</tr></thead>
+<tbody>
+<tr><td>------------</td><td>------------------</td></tr>
+<tr><td>Codex</td><td>Files, terminal, MCP, skills</td></tr>
+<tr><td>Agent</td><td>Skills, MCP, tools</td></tr>
+<tr><td>Skill</td><td>Used by agent</td></tr>
+<tr><td>MCP Server</td><td>Executes tools</td></tr>
+<tr><td>Tool</td><td>External world</td></tr>
+</tbody></table>
+
+<p><hr/></p>
+
+<p><h2>❌ Not Allowed / Conceptually Wrong</h2></p>
+
+<table>
+<thead><tr>
+<th>Wrong Idea</th>
+<th>Why Wrong</th>
+</tr></thead>
+<tbody>
+<tr><td>------------</td><td>----------</td></tr>
+<tr><td>MCP server planning tasks</td><td>It is passive</td></tr>
+<tr><td>Skill executing subprocess</td><td>Skills do not run</td></tr>
+<tr><td>Agent editing source code directly</td><td>That is Codex’s role</td></tr>
+<tr><td>Codex acting as production runtime</td><td>Codex is dev assistant</td></tr>
+</tbody></table>
+
+<p><hr/></p>
+
+<p><h1>0.4 Two Kinds of Agents</h1></p>
+
+<p>This is subtle but critical.</p>
+
+<p><hr/></p>
+
+<p><h2>Type A — Development Agent</h2></p>
+
+<p>Codex in VS Code is itself an agent.</p>
+
+<p>It:</p>
+<ul>
+<li>Reads your repo</li>
+<li>Edits files</li>
+<li>Runs commands</li>
+<li>Follows AGENTS.md</li>
+</ul>
+
+<p>This is a <strong>development-time agent</strong>.</p>
+
+<p><hr/></p>
+
+<p><h2>Type B — Runtime Agent</h2></p>
+
+<p>An agent you write in your app:</p>
+
+<p>Example:</p>
+<ul>
+<li>A task planner</li>
+<li>A log analyzer</li>
+<li>A regression triage system</li>
+</ul>
+
+<p>This is a <strong>runtime agent</strong>.</p>
+
+<p><hr/></p>
+
+<p><h3>Key Insight</h3></p>
+
+<p>Codex builds runtime agents.</p>
+
+<p>Codex ≠ your runtime agent.</p>
+
+<p><hr/></p>
+
+<p><h1>0.5 Minimal Concrete Example</h1></p>
+
+<p>Let’s make it very simple.</p>
+
+<p>Imagine we build a task manager.</p>
+
+<p><hr/></p>
+
+<p><h3>Option 1 — No Agent</h3></p>
+
+<p>User types:</p>
+<p><pre><code>
+add task: buy milk
+</code></pre></p>
+
+<p>System:</p>
+<ul>
+<li>Writes to file</li>
+<li>Done</li>
+</ul>
+
+<p>No decisions. No loop. No agent.</p>
+
+<p><hr/></p>
+
+<p><h3>Option 2 — With Agent</h3></p>
+
+<p>User types:</p>
+<p><pre><code>
+Plan my week
+</code></pre></p>
+
+<p>Agent:</p>
+<p>1. Reads current tasks</p>
+<p>2. Groups by priority</p>
+<p>3. Estimates time</p>
+<p>4. Allocates slots</p>
+<p>5. Suggests schedule</p>
+<p>6. Waits for confirmation</p>
+<p>7. Adjusts</p>
+
+<p>Now we have:</p>
+<ul>
+<li>Planning</li>
+<li>Iteration</li>
+<li>Tool calls</li>
+<li>Observations</li>
+</ul>
+
+<p>That is an agent.</p>
+
+<p><hr/></p>
+
+<p><h1>0.6 Where Skills Fit in That Example</h1></p>
+
+<p>Skill might contain:</p>
+
+<ul>
+<li>Scheduling heuristics</li>
+<li>Time estimation rules</li>
+<li>Task prioritization logic</li>
+<li>Prompt templates</li>
+</ul>
+
+<p>Agent uses skill when needed.</p>
+
+<p><hr/></p>
+
+<p><h1>0.7 Where MCP Fits in That Example</h1></p>
+
+<p>MCP server could provide:</p>
+
+<ul>
+<li>`task.read_all`</li>
+<li>`task.create`</li>
+<li>`calendar.reserve_slot`</li>
+<li>`timer.start`</li>
+</ul>
+
+<p>Agent calls MCP.</p>
+<p>MCP executes.</p>
+<p>Returns result.</p>
+
+<p><hr/></p>
+
+<p><h1>0.8 Enterprise Features (What We Won’t Use)</h1></p>
+
+<p>Enterprise environments might allow:</p>
+
+<ul>
+<li>Remote MCP servers</li>
+<li>Central authentication</li>
+<li>Policy enforcement</li>
+<li>Shared tool registries</li>
+<li>Multi-user agent orchestration</li>
+</ul>
+
+<p>We will not depend on any of that.</p>
+
+<p>We will:</p>
+<ul>
+<li>Build everything locally</li>
+<li>Use OpenAI API</li>
+<li>Stay under $10 usage</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h1>0.9 Summary Diagram</h1></p>
+
+<p>Final mental compression:</p>
+
+<p><pre><code>
+Codex → builds → Agent
+Agent → uses → Skill
+Agent → calls → MCP
+MCP → executes → Tools
+Tools → affect → System
+</code></pre></p>
+
+<p>If you understand this diagram, everything else becomes mechanical.</p>
+
+<p><hr/></p>
+
+<p><h1>🎯 Checkpoint</h1></p>
+
+<p>Before moving to Lesson 1, answer mentally:</p>
+
+<p>1. Does a Skill ever run a subprocess?</p>
+<p>2. Does an MCP server decide when to call tools?</p>
+<p>3. Can Codex be your production backend?</p>
+<p>4. Who owns the loop in an agent system?</p>
+
+<p>If those answers are clear, you're ready.</p>
+
+<p><hr/></p>
+
+<p><h1>Next</h1></p>
+
+<p>Lesson 1 will begin the practical training.</p>
+
+<p>We will:</p>
+
+<ul>
+<li>Set up a Windows-first environment</li>
+<li>Initialize a minimal project</li>
+<li>Use Codex deliberately</li>
+<li>Force it to write heavily commented code</li>
+<li>Build a non-agent baseline CLI task manager</li>
+</ul>
+
+<p>Only after that will we introduce:</p>
+<ul>
+<li>Agent loop</li>
+<li>MCP server</li>
+<li>Skill structure</li>
+</ul>
+
+<p>We build from stable ground.</p>
+
+<p><hr/></p>
+
+<p>When you’re ready, say:</p>
+
+<p><blockquote>Proceed to Lesson 1.</blockquote></p>
+<hr/>
+<h2>Supplemental rendered diagrams (for the file format)</h2>
+<p class="smallnote">These diagrams are added because the chat used UI-only carousels; the main text above is kept as-is.</p>
+<h3>Conceptual Stack</h3>
+<img class="diagram" src="part0_stack.png" alt="Conceptual Stack"/>
+<h3>Agent Loop</h3>
+<img class="diagram" src="part0_agent_loop.png" alt="Agent Loop"/>
+<h3>Interaction Summary</h3>
+<img class="diagram" src="part0_interactions.png" alt="Interaction Summary"/>
+</body>
+</html>

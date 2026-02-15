@@ -1,0 +1,288 @@
+<!doctype html><html><head><meta charset='utf-8'/><title>Appendix C — Bounded Model Skill Routing (Codex Edition)</title><style>body{font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;margin:40px;line-height:1.5}pre{background:#f3f3f3;padding:12px;overflow-x:auto}code{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}hr{margin:24px 0}</style></head><body><p><h1>Appendix C — Bounded Model-Assisted Skill Routing Using Codex (No Keyword Fallback)</h1></p>
+
+<p><hr/></p>
+
+<p><h2>C.1 Goal</h2></p>
+
+<p>Keyword routing is weak. We want synonyms and disambiguation without giving the model full control.</p>
+
+<p>This appendix adds a <strong>bounded, model-assisted skill router</strong> where:</p>
+
+<ul>
+<li>A *small* model call classifies intent into a fixed enum of skills</li>
+<li>Output must be strict JSON</li>
+<li>We validate deterministically</li>
+<li>We retry until success or a defined fail state</li>
+<li><strong>No keyword fallback</strong> (your rule)</li>
+</ul>
+
+<p>This is implemented <strong>with Codex writing the code</strong>, step by step.</p>
+
+<p><hr/></p>
+
+<p><h2>C.2 Conceptual Diagram</h2></p>
+
+<p><pre><code>
+User goal text
+   ↓
+Skill Router (bounded model call)
+   ↓  (validated JSON)
+Selected optional skills
+   ↓
+Agent prompt = base system + always_on + selected skill files + user goal
+   ↓
+Normal agent loop (unchanged)
+   ↓
+MCP tools (unchanged)
+</code></pre></p>
+
+<p>Routing affects <strong>prompt composition only</strong>.</p>
+
+<p><hr/></p>
+
+<p><h2>C.3 Prerequisites</h2></p>
+
+<p>You already have from earlier lessons:</p>
+
+<ul>
+<li>`agent.py` with a stable agent loop</li>
+<li>`skills/` directory</li>
+<li>`skills/always_on.md` (always injected)</li>
+<li>Optional skills like:</li>
+</ul>
+<p>  - `skills/task_planning.md`</p>
+<p>  - `skills/status_reporting.md`</p>
+<p>  - `skills/output_format.md`</p>
+
+<p>Also:</p>
+<ul>
+<li>Your OpenAI API key set in your environment (or config) for runtime agent calls.</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h2>C.4 The bounded routing contract</h2></p>
+
+<p><h3>Allowed skills enum</h3></p>
+
+<p>Only these are allowed to be selected by routing:</p>
+
+<ul>
+<li>`task_planning`</li>
+<li>`status_reporting`</li>
+<li>`output_format`</li>
+</ul>
+
+<p>`always_on` is <strong>not</strong> routable, because it is always injected deterministically.</p>
+
+<p><h3>Output JSON shape (strict)</h3></p>
+
+<p>The router model must output exactly:</p>
+
+<p><pre><code>json
+{
+  "skills": ["task_planning", "output_format"],
+  "confidence": 0.82,
+  "notes": "One short sentence."
+}
+</code></pre></p>
+
+<p>Validation rules:</p>
+
+<ul>
+<li>Must parse as JSON object</li>
+<li>Keys must be exactly: `skills`, `confidence`, `notes`</li>
+<li>`skills` list contains only allowed names, no duplicates</li>
+<li>`confidence` is number in [0, 1]</li>
+<li>`notes` short string (optional for logging only)</li>
+</ul>
+
+<p>If invalid: retry (no fallback).</p>
+
+<p><hr/></p>
+
+<p><h2>C.5 Lesson → Task → Expected output → Explanation (Codex driven)</h2></p>
+
+<p><h3>Lesson: Create a dedicated router module</h3></p>
+
+<p>#### Task (ask Codex)</p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; Create a new file `skill_router.py`.  </p>
+<p>&gt; Implement a bounded model-assisted router:</p>
+<p>&gt; - `route_skills_with_model(goal: str, call_model_fn, max_attempts: int) -&gt; (ok, skills, reason)`</p>
+<p>&gt; - The router must:</p>
+<p>&gt;   - Build a routing prompt that lists the allowed skill enum and descriptions</p>
+<p>&gt;   - Demand JSON only</p>
+<p>&gt;   - Validate the JSON deterministically</p>
+<p>&gt;   - Retry until success or fail state after max_attempts</p>
+<p>&gt;   - No keyword fallback</p>
+<p>&gt; - Keep code pure Python, standard library only (json, typing).</p>
+<p>&gt; - Add comments explaining why this is safe and debuggable.</p>
+<p>&gt; - Use ASCII only in strings.</p>
+
+<p>#### Expected output</p>
+
+<ul>
+<li>New file `skill_router.py` exists</li>
+<li>It exports:</li>
+</ul>
+<p>  - `ALLOWED_SKILLS`</p>
+<p>  - `route_skills_with_model(...)`</p>
+<ul>
+<li>It contains a validator function that rejects:</li>
+</ul>
+<p>  - wrong keys</p>
+<p>  - unknown skills</p>
+<p>  - duplicates</p>
+<p>  - non-JSON output</p>
+
+<p>#### Explanation</p>
+
+<p>This isolates routing logic from the rest of the agent.</p>
+
+<ul>
+<li>Easy to unit test</li>
+<li>Easy to replace later (embeddings, rules, etc.)</li>
+<li>Keeps agent loop unchanged</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h3>Lesson: Add a low-cost model call for routing</h3></p>
+
+<p>#### Task (ask Codex)</p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; In `agent.py`, create a small helper `call_router_model(messages) -&gt; str` that:</p>
+<p>&gt; - Calls OpenAI with:</p>
+<p>&gt;   - low temperature (0 or close)</p>
+<p>&gt;   - small max_output_tokens (keep it cheap)</p>
+<p>&gt; - Returns the raw text output only</p>
+<p>&gt; - Add a short comment explaining why router calls must be cheap.</p>
+<p>&gt; Then wire it into `route_skills_with_model`.</p>
+
+<p>#### Expected output</p>
+
+<ul>
+<li>A separate, cheaper call path is used for routing</li>
+<li>The main agent model call remains unchanged</li>
+</ul>
+
+<p>#### Explanation</p>
+
+<p>Routing does not need creativity. It needs consistency and low cost.</p>
+
+<p><hr/></p>
+
+<p><h3>Lesson: Integrate router into prompt construction (without changing the loop)</h3></p>
+
+<p>#### Task (ask Codex)</p>
+
+<p>Ask Codex:</p>
+
+<p>&gt; In `agent.py`, modify the prompt construction so it:</p>
+<p>&gt; 1) Always loads `skills/always_on.md`</p>
+<p>&gt; 2) Calls `route_skills_with_model(goal, call_router_model, max_attempts=3)`</p>
+<p>&gt; 3) If ok:</p>
+<p>&gt;    - Loads each selected skill file from `skills/&lt;skill_name&gt;.md` OR maps names to filenames</p>
+<p>&gt; 4) If not ok (fail state):</p>
+<p>&gt;    - Loads no optional skills, proceed with always_on only</p>
+<p>&gt; 5) Concatenates skill texts with a clear separator like "\n\n---\n\n"</p>
+<p>&gt; Requirements:</p>
+<p>&gt; - Do NOT change the agent loop structure</p>
+<p>&gt; - Do NOT change tool execution logic</p>
+<p>&gt; - Add comments emphasizing: routing affects reasoning only</p>
+
+<p>#### Expected output</p>
+
+<ul>
+<li>Agent behavior changes only in reasoning style, not in control-flow</li>
+<li>MCP server and tools remain untouched</li>
+</ul>
+
+<p>#### Explanation</p>
+
+<p>You are changing <strong>instructions</strong> presented to the model, not the runtime mechanics.</p>
+
+<p><hr/></p>
+
+<p><h2>C.6 Fail state behavior (no fallback)</h2></p>
+
+<p>When routing fails after `max_attempts`:</p>
+
+<ul>
+<li>Apply only `always_on` skill</li>
+<li>Continue normal agent loop</li>
+<li>Optionally include a debug log line (one line) stating routing failed</li>
+</ul>
+
+<p>Why:</p>
+
+<ul>
+<li>No silent application of wrong skills</li>
+<li>No guessing by keywords</li>
+<li>Deterministic safe behavior</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h2>C.7 Practical tests (run after Codex implementation)</h2></p>
+
+<p>Run these commands and observe:</p>
+
+<p>1) Synonyms:</p>
+
+<ul>
+<li>Goal: "display my tasks"</li>
+</ul>
+<p>  - expected: `status_reporting`</p>
+
+<ul>
+<li>Goal: "print tasks in JSON"</li>
+</ul>
+<p>  - expected: `status_reporting` + `output_format`</p>
+
+<p>2) Disambiguation:</p>
+
+<ul>
+<li>Goal: "add tasks about planning a TV show"</li>
+</ul>
+<p>  - expected: often none, or only what you decide is correct based on your skill definitions</p>
+<p>  - important: router should not crash; if uncertain it can return empty skills with lower confidence</p>
+
+<p>3) Mixed:</p>
+
+<ul>
+<li>Goal: "plan today in a markdown table"</li>
+</ul>
+<p>  - expected: `task_planning` + `output_format`</p>
+
+<p>Tip:</p>
+
+<ul>
+<li>Temporarily log the selected skills list in agent.py (one line), then remove it.</li>
+</ul>
+
+<p><hr/></p>
+
+<p><h2>C.8 Checkpoint</h2></p>
+
+<p>Answer:</p>
+
+<p>1) Who controls which skills are even possible?  </p>
+<p>2) Who validates the router output?  </p>
+<p>3) What happens if routing fails after all retries?  </p>
+<p>4) Did we change the agent loop?  </p>
+
+<p>If these are clear, you have a robust alternative to keyword routing while staying debuggable.</p>
+
+<p><hr/></p>
+
+<p><h2>C.9 Notes and sources</h2></p>
+
+<p>Codex skills are typically described as directories containing `SKILL.md` and loaded via progressive disclosure. citeturn0search2turn0search3</p>
+
+<p>This appendix uses our course project style (skills as simple `.md` files loaded by the runtime agent) while keeping the same mental model: skills are passive instructions, not tools. citeturn0search2</p></body></html>
