@@ -73,3 +73,41 @@ def mark_done(task_id: int) -> None:
             return
 
     print(f"Task #{task_id} not found.")
+
+
+# Delete one task by its numeric id.
+def delete_task(task_id: int) -> None:
+    """Delete one task by id."""
+    tasks = load_tasks()
+    for idx, task in enumerate(tasks):
+        if task["id"] == task_id:
+            deleted_title = task["title"]
+            del tasks[idx]
+            save_tasks(tasks)
+            print(f"Deleted task #{task_id}: {deleted_title}")
+            return
+
+    print(f"Task #{task_id} not found.")
+
+
+# Delete multiple tasks by their numeric ids in one deterministic operation.
+def delete_tasks(task_ids: list[int]) -> None:
+    """Delete all tasks whose ids are included in task_ids."""
+    # Keep first-seen order while removing duplicates.
+    unique_ids = list(dict.fromkeys(task_ids))
+    if not unique_ids:
+        print("No tasks deleted.")
+        return
+
+    tasks = load_tasks()
+    id_set = set(unique_ids)
+    deleted = [task for task in tasks if task["id"] in id_set]
+    if not deleted:
+        print("No tasks deleted.")
+        return
+
+    deleted_ids = [task["id"] for task in deleted]
+    remaining = [task for task in tasks if task["id"] not in id_set]
+    save_tasks(remaining)
+    ids_text = ", ".join(str(task_id) for task_id in deleted_ids)
+    print(f"Deleted {len(deleted_ids)} task(s): {ids_text}")

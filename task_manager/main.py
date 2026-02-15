@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from typing import Callable
 
-from storage import add_task, list_tasks, mark_done
+from storage import add_task, delete_task, list_tasks, mark_done
 
 
 # Build the command-line interface structure and arguments.
@@ -37,6 +37,10 @@ def build_parser() -> argparse.ArgumentParser:
     # `done` marks one task complete by numeric id.
     done_parser = subparsers.add_parser("done", help="Mark a task as done")
     done_parser.add_argument("id", type=int, help="Task id")
+
+    # `delete` removes one task by numeric id.
+    delete_parser = subparsers.add_parser("delete", help="Delete a task")
+    delete_parser.add_argument("id", type=int, help="Task id")
 
     return parser
 
@@ -90,10 +94,10 @@ def main() -> None:
         parser.error("Use either --gui or --goal, not both.")
 
     if args.gui and args.command:
-        parser.error("Use either --gui or a subcommand (add/list/done), not both.")
+        parser.error("Use either --gui or a subcommand (add/list/done/delete), not both.")
 
     if args.goal and args.command:
-        parser.error("Use either --goal or a subcommand (add/list/done), not both.")
+        parser.error("Use either --goal or a subcommand (add/list/done/delete), not both.")
 
     if args.gui:
         launch_gui()
@@ -111,8 +115,10 @@ def main() -> None:
         list_tasks()
     elif args.command == "done":
         mark_done(args.id)
+    elif args.command == "delete":
+        delete_task(args.id)
     else:
-        parser.error("Provide --gui, --goal, or one subcommand: add, list, done.")
+        parser.error("Provide --gui, --goal, or one subcommand: add, list, done, delete.")
 
 
 if __name__ == "__main__":
