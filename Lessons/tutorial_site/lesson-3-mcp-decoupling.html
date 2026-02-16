@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 3 - MCP decoupling | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a class="active" href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <div class="sidebar-map">
+      <h2>Lesson 3 map</h2>
+      <a class="sidebar-sub-link" href="#p1-outcomes">P1: What you will learn</a>
+      <a class="sidebar-sub-link" href="#p2-what-changes">P2: What changes and what stays</a>
+      <a class="sidebar-sub-link" href="#p3-why-mcp">P3: Why MCP exists</a>
+      <a class="sidebar-sub-link" href="#p4-local-design">P4: Minimal local MCP design</a>
+      <a class="sidebar-sub-link" href="#p5-diagram-format">P5: Architecture and message format</a>
+      <a class="sidebar-sub-link" href="#p6-server">P6: Task 1 - Create MCP server</a>
+      <a class="sidebar-sub-link" href="#p7-client">P7: Task 2 - Create MCP client</a>
+      <a class="sidebar-sub-link" href="#p8-rewire-agent">P8: Task 3 - Rewire agent execution</a>
+      <a class="sidebar-sub-link" href="#p9-insight">P9: Critical insight</a>
+      <a class="sidebar-sub-link" href="#p10-scope">P10: What this teaches and scope</a>
+      <a class="sidebar-sub-link" href="#p11-checkpoint">P11: Checkpoint and next</a>
+    </div>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Deterministic routing</a>
+    <a href="appendix-b-bounded-routing.html">Appendix B - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Lesson 3 - Decoupling with a minimal MCP boundary</h2>
+      <p>
+        In Lesson 2, the agent called local execution directly. In this lesson, we keep the same agent loop
+        and move execution behind a subprocess boundary.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">MAP</span> Lesson map</h3>
+        <p>Use this map first, then walk section by section.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li><a class="map-link" href="#p1-outcomes">P1: What you will learn.</a></li>
+            <li><a class="map-link" href="#p2-what-changes">P2: What changes and what stays.</a></li>
+            <li><a class="map-link" href="#p3-why-mcp">P3: Why MCP exists.</a></li>
+            <li><a class="map-link" href="#p4-local-design">P4: Minimal local MCP design.</a></li>
+            <li><a class="map-link" href="#p5-diagram-format">P5: Architecture and message format.</a></li>
+            <li><a class="map-link" href="#p6-server">P6: Task 1 - Create MCP server.</a></li>
+            <li><a class="map-link" href="#p7-client">P7: Task 2 - Create MCP client.</a></li>
+            <li><a class="map-link" href="#p8-rewire-agent">P8: Task 3 - Rewire agent execution.</a></li>
+            <li><a class="map-link" href="#p9-insight">P9: Critical insight.</a></li>
+            <li><a class="map-link" href="#p10-scope">P10: What this teaches and scope.</a></li>
+            <li><a class="map-link" href="#p11-checkpoint">P11: Checkpoint and next.</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p1-outcomes"><span class="marker">P1</span> What you will learn in this lesson</h3>
+        <p>These outcomes define what done means for MCP decoupling.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>By the end of this page, you should be clear on:</h4>
+          <ul>
+            <li>Why MCP separates execution from agent reasoning and control flow.</li>
+            <li>How to build a minimal deterministic MCP server over stdin/stdout.</li>
+            <li>How to add an MCP client and rewire only the execution layer.</li>
+            <li>How to prove loop logic, stop conditions, and token handling remain unchanged.</li>
+            <li>Why this local pattern scales to remote and enterprise setups later.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p2-what-changes"><span class="marker">P2</span> What changes and what stays the same</h3>
+        <p>This lesson adds a boundary, not a new planning model.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>What stays the same</h4>
+          <ul>
+            <li><code>agent.py</code> loop ownership.</li>
+            <li>Step counter and stop conditions.</li>
+            <li>OpenAI call path and token controls.</li>
+            <li><code>storage.py</code> and <code>tasks_db.json</code>.</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h4>What changes</h4>
+          <ul>
+            <li>Execution moves from direct local calls to an MCP client/server boundary.</li>
+            <li>The agent sends tool requests through <code>mcp_client.py</code>.</li>
+            <li><code>mcp_server.py</code> handles dispatch and calls storage internally.</li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Simple example</h4>
+          <p>
+            The user asks to list tasks. The agent still decides to call <code>list_tasks</code>.
+            Only the execution path changes from local function call to MCP message.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p3-why-mcp"><span class="marker">P3</span> Why MCP exists</h3>
+        <p>MCP gives a stable execution contract independent from the agent loop.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li>Decouples tool execution from agent runtime logic.</li>
+            <li>Enables tools to run in separate processes and potentially separate hosts.</li>
+            <li>Supports shared tool infrastructure across multiple agents.</li>
+            <li>Creates a clear place for policy, auditing, and reliability controls later.</li>
+          </ul>
+        </div>
+        <p>In this local lesson, MCP may feel heavier than direct calls. That is intentional: we are training architecture discipline.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p4-local-design"><span class="marker">P4</span> Minimal local MCP design</h3>
+        <p>Keep it synchronous, deterministic, and easy to inspect.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li>One Python server process for tool dispatch.</li>
+            <li>JSON request/response messages over standard IO.</li>
+            <li>No networking, no async framework, no background scheduler.</li>
+            <li>Strict error handling with deterministic response structure.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p5-diagram-format"><span class="marker">P5</span> Architecture and message format</h3>
+        <p>Two concrete views: runtime flow and message contract.</p>
+      </div>
+      <div class="card-body">
+        <div class="diagram">main.py
+  ->
+agent.py
+  ->
+mcp_client.py
+  -> (JSON over stdio)
+mcp_server.py
+  ->
+storage.py
+  ->
+tasks_db.json</div>
+        <div class="note">
+          <h4>Request message</h4>
+          <pre class="code">{
+  "tool": "add_task",
+  "arguments": { "text": "Buy milk" }
+}</pre>
+          <h4>Response message</h4>
+          <pre class="code">{
+  "status": "ok",
+  "result": "..."
+}</pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p6-server"><span class="marker">P6</span> Task 1 - Create MCP server</h3>
+        <p>Server is execution-only and model-agnostic.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l3-prompt-server">Copy</button>
+            </div>
+            <pre id="l3-prompt-server" class="code">Create mcp_server.py.
+Requirements:
+- Runs as a standalone Python process.
+- Reads JSON messages from stdin.
+- Writes JSON responses to stdout.
+- Supports: add_task, list_tasks, complete_task, delete_tasks.
+- Calls storage.py internally.
+- Keep it synchronous and deterministic.
+
+Add comments explaining:
+- message format,
+- tool dispatch,
+- why this is decoupled from the agent.
+
+Explanation placement:
+- In code comments: explain request parsing, dispatch, and deterministic errors.
+- In Codex chat response: summarize process model and test steps.
+- In both: explain why server has no loop/planning responsibility.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Verify stdin request parsing and stdout response serialization are explicit.</li>
+              <li>Verify unknown tools return deterministic error responses.</li>
+              <li>Verify no OpenAI calls exist in <code>mcp_server.py</code>.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="note">
+          <h4>Expected output after this stage</h4>
+          <ul>
+            <li><code>mcp_server.py</code> exists as a standalone process entry point.</li>
+            <li>Tool dispatch routes to storage-backed behavior only.</li>
+            <li>Message format is deterministic and documented.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p7-client"><span class="marker">P7</span> Task 2 - Create MCP client</h3>
+        <p>Client owns subprocess communication, not planning.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l3-prompt-client">Copy</button>
+            </div>
+            <pre id="l3-prompt-client" class="code">Create mcp_client.py.
+Requirements:
+- Starts mcp_server.py as subprocess.
+- Sends JSON requests.
+- Receives JSON responses.
+- Handles startup and request errors gracefully.
+
+Add comments explaining:
+- why subprocess boundary matters,
+- how this simulates real MCP architecture.
+
+Explanation placement:
+- In code comments: explain subprocess lifecycle and I/O handling.
+- In Codex chat response: summarize error paths and verification steps.
+- In both: explain why client does not decide agent behavior.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Verify server process starts from client side only.</li>
+              <li>Verify malformed or failed responses are handled clearly.</li>
+              <li>Verify client API remains simple for agent integration.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="note">
+          <h4>Expected output after this stage</h4>
+          <ul>
+            <li><code>mcp_client.py</code> exists and can send/receive deterministic JSON messages.</li>
+            <li>Server lifecycle is managed by client code.</li>
+            <li>No loop logic is introduced in client/server files.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p8-rewire-agent"><span class="marker">P8</span> Task 3 - Rewire agent execution to MCP</h3>
+        <p>Change execution plumbing only.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l3-prompt-rewire">Copy</button>
+            </div>
+            <pre id="l3-prompt-rewire" class="code">Modify agent.py so tool calls go through mcp_client.py instead of tools.py.
+Do not modify:
+- loop logic,
+- stop conditions,
+- step counter,
+- token handling.
+Only replace the execution layer.
+
+Add comments explaining why the agent remains unchanged.
+
+Explanation placement:
+- In code comments: explain where execution plumbing changed.
+- In Codex chat response: list unchanged loop/control behaviors.
+- In both: explain reasoning-path vs execution-path separation.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Run one goal and verify tool calls go through MCP path in logs.</li>
+              <li>Confirm loop structure is unchanged by diff.</li>
+              <li>Confirm failures in MCP path do not mutate loop ownership.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="note">
+          <h4>Expected output after this stage</h4>
+          <ul>
+            <li>Agent uses <code>mcp_client.py</code> for execution calls.</li>
+            <li>All control-flow guardrails remain intact.</li>
+            <li>Architecture boundaries are now explicit and testable.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p9-insight"><span class="marker">P9</span> Critical insight</h3>
+        <p>If this lesson is implemented correctly, only execution plumbing changes.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>You should not change:</h4>
+          <ul>
+            <li>Loop logic.</li>
+            <li>Stop conditions.</li>
+            <li>Step counter.</li>
+            <li>Token handling strategy.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p10-scope"><span class="marker">P10</span> What this teaches and scope</h3>
+        <p>Same mental model now, scalable architecture later.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>What this teaches now</h4>
+          <ul>
+            <li>Agent does planning/control; MCP executes tools.</li>
+            <li>Execution can move out-of-process without changing agent reasoning flow.</li>
+            <li>Storage remains unaware of agent or MCP details.</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h4>Enterprise features we are not using in this course</h4>
+          <ul>
+            <li>Remote MCP servers: tools can run on separate hosts/services.</li>
+            <li>Auth and policy gates: enforce identity and operation permissions.</li>
+            <li>Shared tool registries: many agents use the same execution fabric.</li>
+            <li>Centralized observability: aggregate logs, traces, and reliability metrics.</li>
+          </ul>
+          <p class="small">We exclude these now to keep focus on the core decoupling model.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p11-checkpoint"><span class="marker">P11</span> Checkpoint and next lesson</h3>
+        <p>Use these to verify architectural understanding before moving on.</p>
+      </div>
+      <div class="card-body">
+        <div class="checkpoint">
+          <ol class="qa">
+            <li>
+              Did the agent loop change in this lesson?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l3-a1">Reveal answer</button>
+                <span id="l3-a1" class="answer">No. Only execution plumbing should change.</span>
+              </div>
+            </li>
+            <li>
+              Who executes tools now?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l3-a2">Reveal answer</button>
+                <span id="l3-a2" class="answer">The MCP server executes tool requests; the agent orchestrates the loop.</span>
+              </div>
+            </li>
+            <li>
+              Does the MCP server know anything about OpenAI?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l3-a3">Reveal answer</button>
+                <span id="l3-a3" class="answer">No. MCP server is model-agnostic execution infrastructure.</span>
+              </div>
+            </li>
+            <li>
+              Can multiple agents reuse the same MCP server design?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l3-a4">Reveal answer</button>
+                <span id="l3-a4" class="answer">Yes. That is one of the main benefits of decoupling execution.</span>
+              </div>
+            </li>
+            <li>
+              Is storage aware of agent or MCP?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l3-a5">Reveal answer</button>
+                <span id="l3-a5" class="answer">No. Storage should stay unaware and only manage data persistence.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="lesson-2-agent-loop.html">Back: Lesson 2</a>
+          <a class="lesson-link" href="lesson-4-skills.html">Next: Lesson 4</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
+

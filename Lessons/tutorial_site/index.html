@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Calm, step-by-step learning path. One lesson at a time.</p>
+    <a class="active" href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Deterministic routing</a>
+    <a href="appendix-b-bounded-routing.html">Appendix B - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Welcome to: Agents, Skills, MCP server &amp; Tools.</h2>
+      <p>
+        This version is intentionally gentle. Each lesson first explains the concept in plain language,
+        then gives you one concrete Codex prompt, then a short student checklist, then a small checkpoint.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">Flow</span> How to use each lesson page</h3>
+        <p>No rushing. Read, run, review, reflect.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Learning loop (repeat this for every lesson)</h4>
+          <ul>
+            <li>Read the concept section and the simple example first.</li>
+            <li>Copy the prompt block and send it to Codex.</li>
+            <li>Do the student review checklist after code is generated.</li>
+            <li>Answer the checkpoint questions, then reveal the answers.</li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Why this structure works</h4>
+          <p>
+            It keeps coding and learning synchronized. You do not just generate code;
+            you also understand why each architecture decision exists.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">Map</span> Course map</h3>
+        <p>One page per lesson, all with the same visual language.</p>
+      </div>
+      <div class="card-body">
+        <div class="cards-grid">
+          <a class="lesson-card" href="lesson-0-foundations.html">
+            <h4>Lesson 0 - Foundations</h4>
+            <p>Understand what Codex, Agent, Skill, MCP, and Tool each do.</p>
+          </a>
+          <a class="lesson-card" href="lesson-1-baseline.html">
+            <h4>Lesson 1 - Baseline</h4>
+            <p>Build deterministic CLI first. No agent yet.</p>
+          </a>
+          <a class="lesson-card" href="lesson-2-agent-loop.html">
+            <h4>Lesson 2 - Agent loop</h4>
+            <p>Add minimal loop control and tool-calling discipline.</p>
+          </a>
+          <a class="lesson-card" href="lesson-3-mcp-decoupling.html">
+            <h4>Lesson 3 - MCP decoupling</h4>
+            <p>Move execution behind a process boundary without changing loop logic.</p>
+          </a>
+          <a class="lesson-card" href="lesson-4-skills.html">
+            <h4>Lesson 4 - Skills</h4>
+            <p>Inject reasoning guidance without touching execution flow.</p>
+          </a>
+          <a class="lesson-card" href="lesson-5-ui-boundary.html">
+            <h4>Lesson 5 - UI boundary</h4>
+            <p>Add GUI safely and keep backend architecture clean.</p>
+          </a>
+          <a class="lesson-card" href="appendix-a-multiple-skills.html">
+            <h4>Appendix A - Deterministic routing</h4>
+            <p>Combined concept + code appendix for deterministic <code>load_skills(goal)</code>.</p>
+          </a>
+          <a class="lesson-card" href="appendix-b-bounded-routing.html">
+            <h4>Appendix B - Bounded routing</h4>
+            <p>Use model-assisted routing with strict JSON validation and fail-safe behavior.</p>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">Ready</span> Start now</h3>
+        <p>Begin with foundations, then move lesson by lesson.</p>
+      </div>
+      <div class="card-body">
+        <div class="lesson-nav">
+          <a class="lesson-link" href="lesson-0-foundations.html">Go to Part 0</a>
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
+
+
+

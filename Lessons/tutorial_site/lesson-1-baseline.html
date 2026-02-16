@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 1 - Baseline | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a class="active" href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <div class="sidebar-map">
+      <h2>Lesson 1 map</h2>
+      <a class="sidebar-sub-link" href="#p1-outcomes">P1: What you will learn</a>
+      <a class="sidebar-sub-link" href="#p2-mental-model">P2: Mental model</a>
+      <a class="sidebar-sub-link" href="#p3-setup">P3: Setup and scaffold prompt</a>
+      <a class="sidebar-sub-link" href="#p4-boundaries">P4: Baseline architecture boundaries</a>
+      <a class="sidebar-sub-link" href="#p5-incremental">P5: Incremental prompting technique</a>
+      <a class="sidebar-sub-link" href="#p6-no-agent-yet">P6: Why no agent yet</a>
+      <a class="sidebar-sub-link" href="#p7-checkpoint">P7: Checkpoint</a>
+      <a class="sidebar-sub-link" href="#p8-next">P8: Next lesson preview</a>
+    </div>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Deterministic routing</a>
+    <a href="appendix-b-bounded-routing.html">Appendix B - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Lesson 1 - Build a deterministic baseline first</h2>
+      <p>
+        Before adding any agent behavior, we build a task manager that works with plain deterministic CLI commands.
+        This gives us a stable reference point for every lesson that follows.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">MAP</span> Lesson map</h3>
+        <p>Use this map to navigate the lesson in order.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li><a class="map-link" href="#p1-outcomes">P1: What you will learn in this lesson.</a></li>
+            <li><a class="map-link" href="#p2-mental-model">P2: Mental model.</a></li>
+            <li><a class="map-link" href="#p3-setup">P3: Setup and scaffold prompt.</a></li>
+            <li><a class="map-link" href="#p4-boundaries">P4: Baseline architecture boundaries.</a></li>
+            <li><a class="map-link" href="#p5-incremental">P5: Incremental prompting technique.</a></li>
+            <li><a class="map-link" href="#p6-no-agent-yet">P6: Why no agent yet.</a></li>
+            <li><a class="map-link" href="#p7-checkpoint">P7: Checkpoint.</a></li>
+            <li><a class="map-link" href="#p8-next">P8: Next lesson preview.</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p1-outcomes"><span class="marker">P1</span> What you will learn in this lesson</h3>
+        <p>These outcomes define what "ready for Lesson 2" means.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>By the end of this page, you should be clear on:</h4>
+          <ul>
+            <li>Why we build a deterministic baseline before introducing an agent.</li>
+            <li>How to scaffold a Windows-first CLI task manager with Codex.</li>
+            <li>How to verify separation of concerns across `main.py`, `storage.py`, and `tasks_db.json`.</li>
+            <li>How to use incremental prompts to avoid architecture drift.</li>
+            <li>Why this baseline is not an agent yet.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p2-mental-model"><span class="marker">P2</span> Mental model</h3>
+        <p>Deterministic now, agent layer later.</p>
+      </div>
+      <div class="card-body">
+        <div class="diagram">User -> CLI (main.py) -> Storage (storage.py) -> tasks_db.json</div>
+        <div class="example">
+          <h4>Simple example</h4>
+          <p>
+            Command: <code>python main.py --add "Buy milk"</code><br>
+            Result: one deterministic file update, no planning, no model call.
+          </p>
+        </div>
+        <div class="note">
+          <h4>Why this matters</h4>
+          <p>
+            If the baseline behavior is unclear, later agent behavior becomes hard to debug because you lose the reference.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p3-setup"><span class="marker">P3</span> Setup and scaffold prompt (Windows first)</h3>
+        <p>First prompt: minimal baseline only, no advanced features.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l1-prompt-scaffold">Copy</button>
+            </div>
+            <pre id="l1-prompt-scaffold" class="code">Create a minimal cross-platform Python CLI project for a task manager.
+Requirements:
+- Must work on Windows first
+- Use argparse
+- Store tasks in tasks_db.json
+- Create virtual environment instructions
+- Add comments explaining each file
+- Explicitly support these commands:
+  - --add "<task text>"
+  - --list
+  - --complete <task_id>
+  - --delete <task_id> [task_id ...] (gets task IDs from --list output and deletes those tasks)
+- For these commands, generate CLI stubs/mockups only:
+  - argparse wiring and function placeholders
+  - clear TODO comments for each command
+  - no real storage/business logic yet
+- Explanation contract:
+  - In-file comments: explain module purpose, command responsibilities, and non-obvious validation logic.
+  - Codex chat response: explain architecture choices, assumptions, and verification steps.
+  - Use both channels for behavior that may confuse future maintainers.
+Expected output structure:
+task_manager/
+|-- main.py
+|-- storage.py
+|-- tasks_db.json (auto-created later)
+|-- README.md
+`-- requirements.txt (likely empty)
+Do NOT implement advanced features yet.
+Do NOT fully implement add/list/complete/delete in this step.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title">
+              <span>Student task after generation</span>
+            </div>
+            <ul class="task-list">
+              <li>Confirm CLI is in <code>main.py</code> and JSON persistence is in <code>storage.py</code>.</li>
+              <li>Confirm README includes PowerShell setup instructions.</li>
+              <li>Confirm command handlers are stubs with TODO markers, not full logic yet.</li>
+              <li>Confirm no agent, MCP, skill routing, or UI logic was added.</li>
+              <li>If boundaries are mixed, ask Codex to refactor before moving on.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="note">
+          <h4>Expected output structure</h4>
+          <pre class="code">task_manager/
+|-- main.py
+|-- storage.py
+|-- tasks_db.json (auto-created later)
+|-- README.md
+`-- requirements.txt (likely empty)</pre>
+        </div>
+        <div class="note">
+          <h4>Minimum commands for this baseline</h4>
+          <pre class="code">python main.py --add "Buy milk"
+python main.py --list
+python main.py --complete 1
+python main.py --delete 2
+python main.py --delete 3 4</pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p4-boundaries"><span class="marker">P4</span> Baseline architecture boundaries</h3>
+        <p>Keep roles separate now so later layers stay clean.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Separation of concerns in this lesson</h4>
+          <ul>
+            <li><code>main.py</code>: parse CLI arguments and dispatch commands.</li>
+            <li><code>storage.py</code>: read and write task data in JSON.</li>
+            <li><code>tasks_db.json</code>: data only.</li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Why this boundary matters later</h4>
+          <p>
+            In later lessons, the agent layer will call tools, tools will call storage, and storage will touch JSON.
+            If these roles are mixed now, later decoupling becomes brittle.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p5-incremental"><span class="marker">P5</span> Incremental prompting technique</h3>
+        <p>Ask for one controlled change at a time.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div class="prompt-stack">
+            <article class="prompt-box">
+              <div class="box-title">
+                <span>Step 1 prompt</span>
+                <button class="copy-btn" data-copy-target="l1-prompt-step1">Copy</button>
+              </div>
+              <pre id="l1-prompt-step1" class="code">Replace the --add stub with a real implementation.
+Include detailed comments.
+Do not implement --list, --complete, or --delete yet.
+In-file comments: explain non-obvious logic and validation checks.
+In chat: explain what changed and how to test it.</pre>
+            </article>
+
+            <article class="prompt-box">
+              <div class="box-title">
+                <span>Step 2 prompt</span>
+                <button class="copy-btn" data-copy-target="l1-prompt-step2">Copy</button>
+              </div>
+              <pre id="l1-prompt-step2" class="code">Replace the --list stub with a real implementation.
+Explain how task indexing works.
+Do not implement --complete or --delete yet.
+In-file comments: explain index rendering rules.
+In chat: explain index assumptions and edge cases.</pre>
+            </article>
+
+            <article class="prompt-box">
+              <div class="box-title">
+                <span>Step 3 prompt</span>
+                <button class="copy-btn" data-copy-target="l1-prompt-step3">Copy</button>
+              </div>
+              <pre id="l1-prompt-step3" class="code">Replace the --complete stub with a real implementation by task ID.
+Keep the behavior deterministic.
+Add clear comments for edge cases.
+In chat: explain completion-state transitions and verification commands.</pre>
+            </article>
+
+            <article class="prompt-box">
+              <div class="box-title">
+                <span>Step 4 prompt</span>
+                <button class="copy-btn" data-copy-target="l1-prompt-step4">Copy</button>
+              </div>
+              <pre id="l1-prompt-step4" class="code">Replace the --delete stub with a real implementation.
+Accept one or more task IDs from --list output and delete those tasks.
+Return clear feedback when IDs are invalid or missing.
+In-file comments: explain multi-ID handling and invalid-ID behavior.
+In chat: explain deletion outcomes and how to verify results.</pre>
+            </article>
+          </div>
+          <article class="task-box">
+            <div class="box-title">
+              <span>Student task after each step</span>
+            </div>
+            <ul class="task-list">
+              <li>Run the command added in that step and confirm deterministic behavior.</li>
+              <li>Check that no unrelated features were introduced.</li>
+              <li>Review comments for clarity and correctness.</li>
+              <li>Commit only after each step is verified.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p6-no-agent-yet"><span class="marker">P6</span> Why no agent yet</h3>
+        <p>This lesson intentionally avoids decision loops.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>What we intentionally do not add</h4>
+          <ul>
+            <li>No agent loop.</li>
+            <li>No model calls.</li>
+            <li>No MCP server.</li>
+            <li>No skills.</li>
+          </ul>
+        </div>
+        <div class="diagram">Current system: deterministic CLI only
+
+User
+  ->
+main.py
+  ->
+storage.py
+  ->
+tasks_db.json
+
+No decision-making loop exists.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p7-checkpoint"><span class="marker">P7</span> Checkpoint</h3>
+        <p>Answer before revealing to test your own understanding.</p>
+      </div>
+      <div class="card-body">
+        <div class="checkpoint">
+          <ol class="qa">
+            <li>
+              Does this system contain an agent?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l1-a1">Reveal answer</button>
+                <span id="l1-a1" class="answer">No. It is deterministic command handling and storage updates only.</span>
+              </div>
+            </li>
+            <li>
+              Where would an agent sit if we add one later?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l1-a2">Reveal answer</button>
+                <span id="l1-a2" class="answer">Above deterministic tools and storage, as a decision layer that chooses actions.</span>
+              </div>
+            </li>
+            <li>
+              Should storage ever call OpenAI?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l1-a3">Reveal answer</button>
+                <span id="l1-a3" class="answer">No. Storage must remain deterministic and model-agnostic.</span>
+              </div>
+            </li>
+            <li>
+              Is Codex part of runtime for end users?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l1-a4">Reveal answer</button>
+                <span id="l1-a4" class="answer">No. Codex helps during development; it is not part of runtime execution.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p8-next"><span class="marker">P8</span> Next lesson preview</h3>
+        <p>Lesson 2 adds the first minimal agent loop on top of this baseline.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li>Real minimal agent loop.</li>
+            <li>OpenAI integration for model responses.</li>
+            <li>Bounded steps and cost-conscious limits.</li>
+            <li>Deterministic guardrails around loop behavior.</li>
+          </ul>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="lesson-0-foundations.html">Back: Lesson 0</a>
+          <a class="lesson-link" href="lesson-2-agent-loop.html">Next: Lesson 2</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
+

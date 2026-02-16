@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 0 - Foundations | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a class="active" href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <div class="sidebar-map">
+      <h2>Lesson 0 map</h2>
+      <a class="sidebar-sub-link" href="#p1-outcomes">P1: What you will learn</a>
+      <a class="sidebar-sub-link" href="#p2-vocabulary">P2: Vocabulary</a>
+      <a class="sidebar-sub-link" href="#p3-stack">P3: Stack and responsibilities</a>
+      <a class="sidebar-sub-link" href="#p4-two-agents">P4: Two kinds of agents</a>
+      <a class="sidebar-sub-link" href="#p5-rules">P5: Interaction rules</a>
+      <a class="sidebar-sub-link" href="#p6-practical">P6: Practical task-planner example</a>
+      <a class="sidebar-sub-link" href="#p7-scope">P7: Scope for this course</a>
+      <a class="sidebar-sub-link" href="#p8-summary">P8: Summary diagram</a>
+      <a class="sidebar-sub-link" href="#p9-checkpoint">P9: Checkpoint</a>
+    </div>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Deterministic routing</a>
+    <a href="appendix-b-bounded-routing.html">Appendix B - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Lesson 0 - Foundations and mental models</h2>
+      <p>
+        Welcome to the lab. Before writing code, we build a clean mental model:
+        what each component does, what it never does, and how they connect.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">MAP</span> Lesson map</h3>
+        <p>Use this as a quick navigation guide before you start reading.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li><a class="map-link" href="#p1-outcomes">P1: What you will learn in this lesson.</a></li>
+            <li><a class="map-link" href="#p2-vocabulary">P2: Vocabulary.</a></li>
+            <li><a class="map-link" href="#p3-stack">P3: Stack and responsibilities.</a></li>
+            <li><a class="map-link" href="#p4-two-agents">P4: Two kinds of agents.</a></li>
+            <li><a class="map-link" href="#p5-rules">P5: Interaction rules.</a></li>
+            <li><a class="map-link" href="#p6-practical">P6: Practical task-planner example.</a></li>
+            <li><a class="map-link" href="#p7-scope">P7: Scope for this course.</a></li>
+            <li><a class="map-link" href="#p8-summary">P8: Summary diagram.</a></li>
+            <li><a class="map-link" href="#p9-checkpoint">P9: Checkpoint.</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p1-outcomes"><span class="marker">P1</span> What you will learn in this lesson</h3>
+        <p>These are the outcomes to keep in mind while you go through the page.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>By the end of this page, you should be clear on:</h4>
+          <ul>
+            <li>What Codex is, and what it is not.</li>
+            <li>What makes a system an agent (and what does not).</li>
+            <li>How skills and MCP differ from tools.</li>
+            <li>How the full stack is layered.</li>
+            <li>Why clear boundaries prevent architecture drift (roles getting mixed and confusing).</li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Hands-on objective for this course</h4>
+          <p>
+            In this course we build a planner agent for human tasks
+            (for example: preparing your child's birthday party).
+            This is a practical vehicle to learn agent concepts end-to-end.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p2-vocabulary"><span class="marker">P2</span> Vocabulary</h3>
+        <p>Definitions first. Precise wording helps later decisions.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Codex plugin in VS Code (development assistant)</h4>
+          <ul>
+            <li>Codex is software running as a VS Code plugin/extension.</li>
+            <li>Can read and edit your workspace.</li>
+            <li>Can run terminal commands (when allowed).</li>
+            <li>Can follow project instructions such as <code>AGENTS.md</code>.</li>
+            <li>Can use skills and interact with MCP-connected tooling.</li>
+            <li>These are Codex development-session capabilities, not runtime planner-agent capabilities.</li>
+            <li>Specialized for code generation and project-file interaction.</li>
+            <li>It is not the application that your users run.</li>
+            <li>The diagram below explains development flow versus runtime flow.</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h4>Agent (runtime decision system)</h4>
+          <ul>
+            <li>Has a goal, chooses actions, observes tool results, repeats.</li>
+            <li>Owns the decision loop.</li>
+            <li>Without a loop, you do not have a true agent.</li>
+            <li>The runtime agent generated in this course is unaware of Codex.</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h4>Skill, MCP, Tool</h4>
+          <ul>
+            <li><strong>Skill:</strong> passive reasoning guidance.</li>
+            <li><strong>MCP server:</strong> passive tool/resource provider.</li>
+            <li><strong>Tool:</strong> concrete deterministic action on system state.</li>
+          </ul>
+        </div>
+        <div class="diagram">Development flow:
+You -> VS Code + Codex plugin -> writes project code -> creates runtime agent
+
+Runtime flow (after code exists):
+User -> runtime agent -> skills + MCP -> tools -> system state
+
+Important: runtime agent does not use Codex as a tool.</div>
+        <div class="example">
+          <h4>Simple generic runtime example</h4>
+          <p>
+            <strong>User:</strong> asks for task-planning support.<br>
+            <strong>Runtime agent:</strong> decides first step and then updates plan based on results.<br>
+            <strong>Skills + MCP:</strong> skills guide the reasoning of the AI/LLM model, MCP exposes task tools.<br>
+            <strong>Tools:</strong> agent calls list/add/complete task tools.<br>
+            <strong>System state:</strong> saved task data changes based on tool results.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p3-stack"><span class="marker">P3</span> The stack - who does what</h3>
+        <p>Layer clarity makes the next lessons much easier.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Layered responsibility map</h4>
+          <ul>
+            <li>Human</li>
+            <li>Codex (development assistant)</li>
+            <li>Your runtime agent</li>
+            <li>Skills (reasoning guidance)</li>
+            <li>MCP servers (tool providers)</li>
+            <li>Tools (filesystem, DB, subprocess, APIs)</li>
+          </ul>
+        </div>
+        <div class="diagram">Codex builds -> runtime agent
+runtime agent uses -> skills
+runtime agent calls -> MCP
+MCP executes -> tools
+tools affect -> system state</div>
+        <div class="note">
+          <h4>Task-planner example for "tools affect system state"</h4>
+          <p class="small">
+            If the planner agent calls <code>add_task("Book birthday cake")</code>,
+            your tasks storage changes. That data change is the "system state" effect.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p4-two-agents"><span class="marker">P4</span> Two kinds of agents</h3>
+        <p>This distinction avoids a lot of confusion later.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <div class="note">
+            <h4>Type A - Development agent</h4>
+            <p class="small">
+              Codex in VS Code helps you build the system.
+            </p>
+          </div>
+          <div class="note">
+            <h4>Type B - Runtime agent</h4>
+            <p class="small">
+              Your app-side agent handles goals and tool calls at runtime.
+            </p>
+          </div>
+        </div>
+        <div class="example">
+          <h4>Key insight</h4>
+          <p>
+            We use Codex as an assistant to generate code, including runtime-agent code.
+            The runtime agent is a separate system and is not aware of Codex.
+            Codex is part of the development flow, not part of runtime tools/capabilities.
+            Codex does not call the planner agent. It only helps develop it.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p5-rules"><span class="marker">P5</span> Interaction rules</h3>
+        <p>These guardrails keep architecture stable as features grow.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Allowed interactions</h4>
+          <ul>
+            <li>Codex -> files, terminal, MCP, skills (during development).</li>
+            <li>Agent decides and calls tools.</li>
+            <li>MCP server executes requested tools.</li>
+            <li>Skills shape model reasoning.</li>
+            <li>Tools affect the external world/state.</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h4>Conceptually wrong interactions</h4>
+          <ul>
+            <li>MCP server planning goals.</li>
+            <li>Skills running subprocesses.</li>
+            <li>Runtime planner agent rewriting project source files (for example <code>agent.py</code> or <code>main.py</code>).</li>
+            <li>Codex directly serving end-user runtime requests.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p6-practical"><span class="marker">P6</span> Practical mental example</h3>
+        <p>One scenario that ties agent, skills, and MCP together.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Option 1 - No agent</h4>
+          <p class="small">
+            User says: "Add task: order birthday candles" -> system writes file -> done.
+            No loop, no planning, no agent.
+          </p>
+        </div>
+        <div class="note">
+          <h4>Option 2 - With agent</h4>
+          <p class="small">
+            User says: "Help me prepare my child's birthday party."
+            Agent reads tasks, prioritizes actions, adds missing steps (cake, venue, decorations),
+            checks progress, and iterates.
+          </p>
+        </div>
+        <div class="note">
+          <h4>Where skills fit</h4>
+          <p class="small">
+            Skills provide planning heuristics, time estimation rules, and formatting guidance.
+          </p>
+        </div>
+        <div class="note">
+          <h4>Where MCP fits</h4>
+          <p class="small">
+            MCP exposes operations like reading tasks, creating tasks, or reserving calendar slots.
+            Agent calls MCP, MCP executes tools, returns results.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p7-scope"><span class="marker">P7</span> Scope for this course</h3>
+        <p>What we are intentionally not using in this hands-on track.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Definition - "Enterprise Features"</h4>
+          <p class="small">
+            Enterprise features are capabilities usually needed by large organizations
+            for centralized control, security, and large-scale shared operations.
+          </p>
+        </div>
+        <div class="note">
+          <h4>Enterprise features we are not using in this course</h4>
+          <ul>
+            <li>
+              Remote MCP servers and centralized auth/policy:
+              tools hosted remotely with organization-wide access control rules.
+            </li>
+            <li>
+              Shared enterprise tool registries:
+              centrally managed catalogs of approved tools for many teams.
+            </li>
+            <li>
+              Multi-user orchestration infrastructure:
+              coordination layers for many users/agents running together.
+            </li>
+          </ul>
+          <p class="small">
+            We stay local-first, practical, and budget-aware.
+          </p>
+          <p class="small">
+            We exclude these on purpose so you can master core concepts without extra infrastructure complexity.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p8-summary"><span class="marker">P8</span> Summary diagram</h3>
+        <p>Final compression of the lesson.</p>
+      </div>
+      <div class="card-body">
+        <div class="diagram">Codex -> builds -> Agent
+Agent -> uses -> Skill
+Agent -> calls -> MCP
+MCP -> executes -> Tools
+Tools -> affect -> System</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p9-checkpoint"><span class="marker">P9</span> Checkpoint</h3>
+        <p>Think first, then reveal.</p>
+      </div>
+      <div class="card-body">
+        <div class="checkpoint">
+          <h4>Quick self-check</h4>
+          <ol class="qa">
+            <li>
+              Does a Skill ever run a subprocess?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="p0-a1">Reveal answer</button>
+                <span id="p0-a1" class="answer">No. A skill is passive reasoning guidance.</span>
+              </div>
+            </li>
+            <li>
+              Does an MCP server decide when to call tools?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="p0-a2">Reveal answer</button>
+                <span id="p0-a2" class="answer">No. MCP executes requests; the agent decides.</span>
+              </div>
+            </li>
+            <li>
+              Can Codex be the application that end users run?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="p0-a3">Reveal answer</button>
+                <span id="p0-a3" class="answer">No. Codex is a development-time assistant, not the application your users run.</span>
+              </div>
+            </li>
+            <li>
+              Who owns the loop in an agent system?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="p0-a4">Reveal answer</button>
+                <span id="p0-a4" class="answer">The runtime agent logic owns the loop.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="example">
+          <h4>Next step</h4>
+          <p>
+            In Lesson 1, we build a deterministic CLI baseline first.
+            Then we will add agent, MCP, and skills gradually on top of that stable base.
+          </p>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="index.html">Back to overview</a>
+          <a class="lesson-link" href="lesson-1-baseline.html">Next: Lesson 1</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
+

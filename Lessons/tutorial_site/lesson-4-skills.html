@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 4 - Skills | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a class="active" href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <div class="sidebar-map">
+      <h2>Lesson 4 map</h2>
+      <a class="sidebar-sub-link" href="#p1-outcomes">P1: What you will learn</a>
+      <a class="sidebar-sub-link" href="#p2-what-is-skill">P2: What is a skill</a>
+      <a class="sidebar-sub-link" href="#p3-skill-vs-tool">P3: Skill vs Tool vs MCP</a>
+      <a class="sidebar-sub-link" href="#p4-architecture">P4: Reasoning/execution flow</a>
+      <a class="sidebar-sub-link" href="#p5-create-skill">P5: Task 1 - Create a skill file</a>
+      <a class="sidebar-sub-link" href="#p6-skill-structure">P6: Example skill structure</a>
+      <a class="sidebar-sub-link" href="#p7-integrate-skill">P7: Task 2 - Integrate skill</a>
+      <a class="sidebar-sub-link" href="#p8-no-change">P8: What must not change</a>
+      <a class="sidebar-sub-link" href="#p9-test-case">P9: Test case</a>
+      <a class="sidebar-sub-link" href="#p10-scope">P10: What this teaches and scope</a>
+      <a class="sidebar-sub-link" href="#p11-checkpoint">P11: Checkpoint and next</a>
+    </div>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Deterministic routing</a>
+    <a href="appendix-b-bounded-routing.html">Appendix B - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Lesson 4 - Skills: structured reasoning without execution</h2>
+      <p>
+        We now add skills to shape model reasoning while keeping the execution stack unchanged.
+        This is the final boundary before UI integration.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">MAP</span> Lesson map</h3>
+        <p>Use this map first, then go section by section.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li><a class="map-link" href="#p1-outcomes">P1: What you will learn.</a></li>
+            <li><a class="map-link" href="#p2-what-is-skill">P2: What is a skill.</a></li>
+            <li><a class="map-link" href="#p3-skill-vs-tool">P3: Skill vs Tool vs MCP.</a></li>
+            <li><a class="map-link" href="#p4-architecture">P4: Reasoning/execution flow.</a></li>
+            <li><a class="map-link" href="#p5-create-skill">P5: Task 1 - Create a skill file.</a></li>
+            <li><a class="map-link" href="#p6-skill-structure">P6: Example skill structure.</a></li>
+            <li><a class="map-link" href="#p7-integrate-skill">P7: Task 2 - Integrate skill.</a></li>
+            <li><a class="map-link" href="#p8-no-change">P8: What must not change.</a></li>
+            <li><a class="map-link" href="#p9-test-case">P9: Test case.</a></li>
+            <li><a class="map-link" href="#p10-scope">P10: What this teaches and scope.</a></li>
+            <li><a class="map-link" href="#p11-checkpoint">P11: Checkpoint and next.</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p1-outcomes"><span class="marker">P1</span> What you will learn in this lesson</h3>
+        <p>These outcomes define done for skills integration.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>By the end of this page, you should be clear on:</h4>
+          <ul>
+            <li>What a skill is and what it is not.</li>
+            <li>How skills differ from tools and MCP boundaries.</li>
+            <li>How to add a skill file with reasoning rules only.</li>
+            <li>How to inject skill text into prompt construction without changing control flow.</li>
+            <li>How to verify reasoning quality changes while execution architecture stays stable.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p2-what-is-skill"><span class="marker">P2</span> What is a skill</h3>
+        <p>A skill is reusable reasoning guidance, not runtime behavior.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>A skill is</h4>
+          <ul>
+            <li>Structured domain knowledge.</li>
+            <li>A reusable reasoning template.</li>
+            <li>Prompt-space guidance for model behavior.</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h4>A skill is not</h4>
+          <ul>
+            <li>Not a loop.</li>
+            <li>Not a tool executor.</li>
+            <li>Not an MCP process.</li>
+            <li>Not a storage layer.</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h4>Skill text format in practice</h4>
+          <p>
+            A skill can be written in any plain text format because the agent injects text into the prompt.
+            In practice, teams use <code>.md</code> files (Markdown) as the standard.
+          </p>
+          <ul>
+            <li>Markdown is easy to read and review.</li>
+            <li>Headings and bullet lists make reasoning rules explicit.</li>
+            <li>Diffs are cleaner in Git, so changes are easier to audit.</li>
+            <li>It stays text-only, so the skill remains guidance, not executable behavior.</li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Simple example</h4>
+          <p>
+            A planning skill can require the model to prioritize tasks by urgency.
+            It cannot execute list, add, complete, or delete actions by itself.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p3-skill-vs-tool"><span class="marker">P3</span> Skill vs Tool vs MCP</h3>
+        <p>Separate responsibilities clearly.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li><strong>Skill:</strong> shapes reasoning and output style.</li>
+            <li><strong>Tool:</strong> executes deterministic operations.</li>
+            <li><strong>MCP:</strong> hosts and dispatches tools behind a boundary.</li>
+            <li><strong>Agent:</strong> owns loop control and chooses when to use skills/tools.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p4-architecture"><span class="marker">P4</span> Reasoning and execution flow</h3>
+        <p>Skills affect reasoning layer only.</p>
+      </div>
+      <div class="card-body">
+        <div class="diagram">User
+  ->
+Agent loop
+  ->
+Skill text injected into prompt
+  ->
+Model reasoning
+  ->
+Tool request
+  ->
+MCP boundary
+  ->
+Storage</div>
+        <div class="example">
+          <h4>Task-planner example</h4>
+          <p>
+            Skill says "group by urgency and do not invent tasks".
+            Agent still calls real tools through MCP to read existing tasks and execute updates.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p5-create-skill"><span class="marker">P5</span> Task 1 - Create a skill file</h3>
+        <p>First add pure text reasoning rules.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l4-prompt-skill">Copy</button>
+            </div>
+            <pre id="l4-prompt-skill" class="code">Create a new folder called skills.
+Inside it create task_planning_skill.md.
+The file should:
+- Define when this skill should be used.
+- Provide structured reasoning rules for task planning.
+- Define constraints (no hallucinated tasks).
+- Explain how tasks should be prioritized.
+- Not include execution logic.
+- Include comments explaining why this is not a tool.
+
+This file is pure text. No Python.
+Do not connect this skill to the agent loop yet.
+
+Explanation placement:
+- In file comments/text: explain intent, constraints, and boundaries.
+- In Codex chat response: summarize what was added and why.
+- In both: explain why skill is reasoning-only.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Verify skill content is actionable but tool-agnostic.</li>
+              <li>Verify constraints are explicit and testable.</li>
+              <li>Verify no execution behavior is described as if it were code.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="note">
+          <h4>Expected output after this stage</h4>
+          <ul>
+            <li><code>skills/task_planning_skill.md</code> exists.</li>
+            <li>Reasoning rules and constraints are explicit.</li>
+            <li>No runtime execution logic is added.</li>
+          </ul>
+          <h4>Good and bad rule examples</h4>
+          <table class="grid-table">
+            <thead>
+              <tr>
+                <th>Rule</th>
+                <th>Judgment</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>Prioritize tasks by deadline first, then urgency, then effort.</code></td>
+                <td>Good</td>
+                <td>Explicit ordering and easy to verify in output.</td>
+              </tr>
+              <tr>
+                <td><code>Only plan using tasks already present in the current task list.</code></td>
+                <td>Good</td>
+                <td>Prevents hallucinations and is testable with empty/non-empty lists.</td>
+              </tr>
+              <tr>
+                <td><code>Be smart and helpful.</code></td>
+                <td>Bad</td>
+                <td>Too vague; no concrete pass/fail check.</td>
+              </tr>
+              <tr>
+                <td><code>Call list_tasks then complete_task for old items.</code></td>
+                <td>Bad</td>
+                <td>Hard-codes tool behavior; skill should stay reasoning-level, not execution-level.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p6-skill-structure"><span class="marker">P6</span> Example skill content structure</h3>
+        <p>Skill text should guide thinking with constraints.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Typical sections</h4>
+          <ul>
+            <li>When to apply the skill.</li>
+            <li>Reasoning sequence.</li>
+            <li>Prioritization logic.</li>
+            <li>Anti-hallucination constraints.</li>
+            <li>Output discipline expectations.</li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Simple example</h4>
+          <pre class="code">When user asks to "plan" or "organize":
+- First inspect existing tasks.
+- Group by urgency and time constraints.
+- Estimate effort realistically.
+- Never invent tasks that are not present.</pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p7-integrate-skill"><span class="marker">P7</span> Task 2 - Integrate skill into agent prompt</h3>
+        <p>Only prompt construction changes.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l4-prompt-inject">Copy</button>
+            </div>
+            <pre id="l4-prompt-inject" class="code">Modify agent.py so that before sending messages to OpenAI,
+it loads task_planning_skill.md and injects it into the system prompt.
+
+The skill integration must:
+- Not modify loop logic.
+- Not modify tool execution logic.
+- Not modify MCP communication.
+- Only affect prompt construction.
+
+Add comments explaining the separation.
+
+Explanation placement:
+- In code comments: explain where and how skill text is injected.
+- In Codex chat response: summarize exactly what remained unchanged.
+- In both: explain reasoning-path vs execution-path separation.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Diff should show prompt-construction changes only.</li>
+              <li>Loop, tool path, and MCP path should remain unchanged.</li>
+              <li>Verify skills are loaded before model call construction.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="note">
+          <h4>Expected output after this stage</h4>
+          <ul>
+            <li>Agent includes skill text in system prompt construction.</li>
+            <li>Execution stack stays untouched.</li>
+            <li>Reasoning quality constraints are now explicit at runtime.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p8-no-change"><span class="marker">P8</span> What must not change</h3>
+        <p>Skills are additive to reasoning only.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li>Agent loop structure.</li>
+            <li>Tool calling mechanism.</li>
+            <li>MCP server and client behavior.</li>
+            <li>Storage schema and persistence behavior.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p9-test-case"><span class="marker">P9</span> Test case</h3>
+        <p>Compare behavior before and after skill injection.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Run</h4>
+          <pre class="code">python main.py --goal "Plan my tasks for today"</pre>
+          <h4>Observe</h4>
+          <ul>
+            <li>Without skill: response may be loose or less structured.</li>
+            <li>With skill: should inspect existing tasks, prioritize, and avoid hallucinated tasks.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p10-scope"><span class="marker">P10</span> What this teaches and scope</h3>
+        <p>Skills complete the reasoning/execution boundary model.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>What this teaches now</h4>
+          <ul>
+            <li>Skills live in prompt space.</li>
+            <li>Tools live in execution space.</li>
+            <li>MCP lives in boundary space.</li>
+            <li>Agent lives in control space.</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h4>Enterprise features we are not using in this course</h4>
+          <ul>
+            <li>Central skill registries with version management.</li>
+            <li>Policy-enforced skill selection per team or environment.</li>
+            <li>Skill audit trails and governance workflows.</li>
+            <li>Dynamic runtime skill loading from external services.</li>
+          </ul>
+          <p class="small">We exclude these now to focus on core skill reasoning boundaries.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p11-checkpoint"><span class="marker">P11</span> Checkpoint and next lesson</h3>
+        <p>Use these questions to validate boundary understanding.</p>
+      </div>
+      <div class="card-body">
+        <div class="checkpoint">
+          <ol class="qa">
+            <li>
+              Does a skill execute code?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l4-a1">Reveal answer</button>
+                <span id="l4-a1" class="answer">No. Skills shape reasoning only.</span>
+              </div>
+            </li>
+            <li>
+              Does a skill own the loop?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l4-a2">Reveal answer</button>
+                <span id="l4-a2" class="answer">No. The agent owns loop control.</span>
+              </div>
+            </li>
+            <li>
+              Does MCP know about skills?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l4-a3">Reveal answer</button>
+                <span id="l4-a3" class="answer">No. MCP handles tool execution, not prompt reasoning.</span>
+              </div>
+            </li>
+            <li>
+              Where is a skill injected?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l4-a4">Reveal answer</button>
+                <span id="l4-a4" class="answer">Into prompt construction before model call.</span>
+              </div>
+            </li>
+            <li>
+              Can multiple agents share one skill file?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l4-a5">Reveal answer</button>
+                <span id="l4-a5" class="answer">Yes, if they agree on the same reasoning contract.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="lesson-3-mcp-decoupling.html">Back: Lesson 3</a>
+          <a class="lesson-link" href="lesson-5-ui-boundary.html">Next: Lesson 5</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
+

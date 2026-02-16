@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Appendix A - Deterministic multi-skill routing | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a class="active" href="appendix-a-multiple-skills.html">Appendix A - Deterministic routing</a>
+    <div class="sidebar-map">
+      <h2>Appendix A map</h2>
+      <a class="sidebar-sub-link" href="#p1-outcomes">P1: What you will learn</a>
+      <a class="sidebar-sub-link" href="#a1">A.1 Scope and boundary</a>
+      <a class="sidebar-sub-link" href="#a2">A.2 Design contract</a>
+      <a class="sidebar-sub-link" href="#a3">A.3 Layout and triggers</a>
+      <a class="sidebar-sub-link" href="#a4">A.4 Reference code</a>
+      <a class="sidebar-sub-link" href="#a5">A.5 Integration steps</a>
+      <a class="sidebar-sub-link" href="#a6">A.6 Manual test matrix</a>
+      <a class="sidebar-sub-link" href="#a7">A.7 Common mistakes</a>
+      <a class="sidebar-sub-link" href="#a8">A.8 Checkpoint</a>
+    </div>
+    <a href="appendix-b-bounded-routing.html">Appendix B - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Appendix A - Deterministic multi-skill routing (concept + code)</h2>
+      <p>
+        This appendix covers design contract, implementation, integration,
+        and verification in one flow.
+      </p>
+    </header>
+
+    <section class="card" id="a0-map">
+      <div class="card-head">
+        <h3><span class="marker">MAP</span> Appendix map</h3>
+        <p>Use this map to navigate Appendix A in order.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li><a class="map-link" href="#p1-outcomes">P1: What you will learn in this appendix.</a></li>
+            <li><a class="map-link" href="#a1">A.1 Scope and boundary.</a></li>
+            <li><a class="map-link" href="#a2">A.2 Design contract.</a></li>
+            <li><a class="map-link" href="#a3">A.3 Layout and trigger sets.</a></li>
+            <li><a class="map-link" href="#a4">A.4 Reference code: load_skills(goal).</a></li>
+            <li><a class="map-link" href="#a5">A.5 Integration steps and student tasks.</a></li>
+            <li><a class="map-link" href="#a6">A.6 Manual test matrix.</a></li>
+            <li><a class="map-link" href="#a7">A.7 Common mistakes.</a></li>
+            <li><a class="map-link" href="#a8">A.8 Checkpoint.</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p1-outcomes"><span class="marker">P1</span> What you will learn in this appendix</h3>
+        <p>These outcomes define what "ready for Appendix B" means.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>By the end of this page, you should be clear on:</h4>
+          <ul>
+            <li>Explain why multi-skill composition should separate concerns.</li>
+            <li>Apply deterministic skill selection with fixed ordering.</li>
+            <li>Implement <code>load_skills(goal)</code> without touching runtime execution mechanics.</li>
+            <li>Validate selected skills with a repeatable test matrix.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="a1">
+      <div class="card-head">
+        <h3><span class="marker">A.1</span> Scope and boundary</h3>
+        <p>One appendix for full deterministic routing workflow.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>What this appendix includes</h4>
+          <ul>
+            <li>Why multiple skills are useful.</li>
+            <li>Deterministic router contract and ordering rules.</li>
+            <li>Concrete <code>load_skills(goal)</code> implementation.</li>
+            <li>Integration and testing steps.</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h4>What remains out of scope</h4>
+          <ul>
+            <li>Model-driven skill selection.</li>
+            <li>Loop-control changes.</li>
+            <li>Tool execution changes.</li>
+            <li>MCP prompt-awareness changes.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="a2">
+      <div class="card-head">
+        <h3><span class="marker">A.2</span> Deterministic router contract</h3>
+        <p>Define stable behavior before coding.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Why multiple skills?</h4>
+          <p>
+            Real agents need modular instruction layers: domain logic, output format rules,
+            and always-on safety policy. Separation keeps prompt behavior explainable and testable.
+          </p>
+        </div>
+        <div class="note">
+          <h4>Contract</h4>
+          <ol>
+            <li>Input: goal text and available skill files.</li>
+            <li>Output: one ordered concatenated skill text block.</li>
+            <li>Always include <code>always_on</code> first.</li>
+            <li>Add domain skills only when explicit triggers match.</li>
+            <li>Add output formatting skill last.</li>
+          </ol>
+        </div>
+        <div class="diagram">Prompt composition (deterministic):
+base system policy
++ always_on
++ optional domain skills
++ optional output_format
++ user goal
+
+Runtime mechanics unchanged:
+agent loop unchanged
+MCP tool execution unchanged</div>
+      </div>
+    </section>
+
+    <section class="card" id="a3">
+      <div class="card-head">
+        <h3><span class="marker">A.3</span> Layout and trigger sets</h3>
+        <p>Use explicit files and explicit keywords.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Recommended skills layout</h4>
+          <pre class="code">skills/
+  always_on.md
+  task_planning.md
+  status_reporting.md
+  output_format.md</pre>
+        </div>
+        <div class="note">
+          <h4>Keyword trigger sets</h4>
+          <ul>
+            <li><code>task_planning</code>: plan, organize, schedule, today, this week</li>
+            <li><code>status_reporting</code>: status, report, summary, summarize</li>
+            <li><code>output_format</code>: table, markdown, csv, json, pretty</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="a4">
+      <div class="card-head">
+        <h3><span class="marker">A.4</span> Reference code: load_skills(goal)</h3>
+        <p>This changes prompt construction only.</p>
+      </div>
+      <div class="card-body">
+        <article class="prompt-box">
+          <div class="box-title">
+            <span>Reference implementation</span>
+            <button class="copy-btn" data-copy-target="a-code-router">Copy</button>
+          </div>
+          <pre id="a-code-router" class="code">import os
+from typing import List
+
+
+def _read_text_file(path: str) -> str:
+    """Read a UTF-8 text file. Return empty string if missing."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        return ""
+
+
+def _contains_any(text: str, keywords: List[str]) -> bool:
+    t = text.lower()
+    return any(k in t for k in keywords)
+
+
+def load_skills(goal: str, skills_dir: str = "skills") -> str:
+    """Deterministically select skills based on goal text."""
+
+    selected_paths: List[str] = []
+
+    # 1) Always-on policy skill
+    selected_paths.append(os.path.join(skills_dir, "always_on.md"))
+
+    # 2) Domain skills
+    if _contains_any(goal, ["plan", "organize", "schedule", "today", "this week"]):
+        selected_paths.append(os.path.join(skills_dir, "task_planning.md"))
+
+    if _contains_any(goal, ["status", "report", "summary", "summarize"]):
+        selected_paths.append(os.path.join(skills_dir, "status_reporting.md"))
+
+    # 3) Output format skill
+    if _contains_any(goal, ["table", "markdown", "csv", "json", "pretty"]):
+        selected_paths.append(os.path.join(skills_dir, "output_format.md"))
+
+    blocks: List[str] = []
+    for p in selected_paths:
+        txt = _read_text_file(p)
+        if txt:
+            blocks.append(txt)
+
+    return "\n\n---\n\n".join(blocks)</pre>
+        </article>
+      </div>
+    </section>
+
+    <section class="card" id="a5">
+      <div class="card-head">
+        <h3><span class="marker">A.5</span> Integration steps and student tasks</h3>
+        <p>Connect router output without changing execution paths.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="a-prompt-integrate">Copy</button>
+            </div>
+            <pre id="a-prompt-integrate" class="code">In agent.py, integrate load_skills(goal) into prompt construction.
+Requirements:
+- Call skills_text = load_skills(goal)
+- Inject skills_text after base system policy and before user goal
+- Do not change agent loop structure
+- Do not change tool execution path
+
+Explanation channel contract:
+1) In-file comments:
+   - non-obvious ordering logic
+   - missing-file behavior and edge-case intent
+2) Codex chat explanation:
+   - what changed and why
+   - test steps and expected outcomes
+3) Both:
+   - critical logic that preserves runtime behavior while changing reasoning input</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student verification</span></div>
+            <ul class="task-list">
+              <li>Confirm skill text is injected in the expected location.</li>
+              <li>Confirm agent loop and MCP tool calls are unchanged.</li>
+              <li>Confirm optional skills appear only when triggers match.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="a6">
+      <div class="card-head">
+        <h3><span class="marker">A.6</span> Manual test matrix</h3>
+        <p>Verify selected skills for each goal.</p>
+      </div>
+      <div class="card-body">
+        <table class="grid-table">
+          <thead>
+            <tr>
+              <th>Goal</th>
+              <th>Expected skills</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>"Plan my tasks for today"</td>
+              <td>always_on + task_planning</td>
+            </tr>
+            <tr>
+              <td>"Give me a status report of my tasks"</td>
+              <td>always_on + status_reporting</td>
+            </tr>
+            <tr>
+              <td>"Plan my tasks for today in a markdown table"</td>
+              <td>always_on + task_planning + output_format</td>
+            </tr>
+            <tr>
+              <td>"Summarize my tasks in JSON"</td>
+              <td>always_on + status_reporting + output_format</td>
+            </tr>
+            <tr>
+              <td>"List tasks"</td>
+              <td>always_on only (typically no domain skill)</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="note">
+          <h4>Fast validation method</h4>
+          <ul>
+            <li>Add a temporary debug print for selected skill file names.</li>
+            <li>Run matrix goals.</li>
+            <li>Remove debug print after validation.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="a7">
+      <div class="card-head">
+        <h3><span class="marker">A.7</span> Common mistakes</h3>
+        <p>Avoid these regressions when implementing deterministic routing.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ol>
+            <li>Letting the model choose skills in a deterministic router.</li>
+            <li>Putting tool execution instructions in skill files.</li>
+            <li>Mixing skill routing logic into MCP server code.</li>
+            <li>Changing the agent loop while adding skill loading.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="a8">
+      <div class="card-head">
+        <h3><span class="marker">A.8</span> Checkpoint</h3>
+        <p>Use active recall before moving to bounded routing in Appendix B.</p>
+      </div>
+      <div class="card-body">
+        <div class="checkpoint">
+          <h4>Checkpoint questions</h4>
+          <ol class="qa">
+            <li>
+              Are skills executed or injected?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="a-a1">Reveal answer</button>
+                <span id="a-a1" class="answer">Injected into prompt context, not executed as tools.</span>
+              </div>
+            </li>
+            <li>
+              Is this router deterministic or model-driven?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="a-a2">Reveal answer</button>
+                <span id="a-a2" class="answer">Deterministic: explicit keyword rules and fixed ordering.</span>
+              </div>
+            </li>
+            <li>
+              Does MCP need to know which skills were loaded?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="a-a3">Reveal answer</button>
+                <span id="a-a3" class="answer">No. MCP handles tools, not prompt composition choices.</span>
+              </div>
+            </li>
+            <li>
+              If output_format is removed, can planning still work?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="a-a4">Reveal answer</button>
+                <span id="a-a4" class="answer">Yes. Planning logic still runs; output style control is reduced.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="lesson-5-ui-boundary.html">Back: Lesson 5</a>
+          <a class="lesson-link" href="appendix-b-bounded-routing.html">Next: Appendix B</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
+
