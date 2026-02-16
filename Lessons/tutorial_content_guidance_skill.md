@@ -87,14 +87,52 @@ Use it as a quality checklist when writing or revising any lesson.
   - checkpoint
 - Use consistent tone: clear, calm, practical, and non-rushed.
 
+## 12) Example progression strategy
+
+- Use a two-step example strategy when teaching new concepts:
+  - Start with a generic example to establish the abstract idea.
+  - Then switch to the course-specific scenario (task planner) for clarity and transfer.
+- Avoid jumping into domain-specific details before the generic pattern is understood.
+
+## 13) Content de-duplication rule
+
+- Do not explain the same flow twice in adjacent blocks unless each block has a different purpose.
+- If two neighboring blocks repeat the same concept, merge them into one stronger example.
+- Use "one concept, one primary block" whenever possible.
+
+## 14) Roadmap usability rule
+
+- If a roadmap card is present, make it actionable:
+  - add anchors/links to target sections.
+- Keep the roadmap concise and aligned with section markers/headings.
+
+## 15) Scope-closure rule
+
+- After listing excluded scope (for example enterprise-only features), add one explicit closure sentence:
+  - why these items are excluded now
+  - what learning benefit this simplification provides.
+- This prevents "why are we skipping this?" confusion.
+
+## 16) Wording guardrail for early lessons
+
+- In foundational lessons, prefer plain phrasing like:
+  - "application your users run"
+  - "runtime process"
+  - "development session"
+- Delay advanced system-design vocabulary until the student has enough context.
+
 ## Quick author checklist
 
 - Is naming consistent (`Lesson N`)?
 - Is there a real map if map is promised?
+- Is roadmap clickable/useful (if shown)?
 - Are concepts explained before prompts?
 - Are terms beginner-safe?
+- Are examples generic-first then scenario-specific?
+- Is duplicate explanation removed?
 - Is Codex-vs-runtime separation explicit?
 - Does every diagram have a concrete example?
 - Are scope boundaries explained with context?
+- Is there a clear scope-closure sentence?
 - Is summary separated from scope?
 - Are checkpoints aligned with core claims?

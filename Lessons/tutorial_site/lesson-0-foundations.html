@@ -40,14 +40,14 @@
         <div class="note">
           <h4>Lesson map</h4>
           <ul>
-            <li>P2: Vocabulary.</li>
-            <li>P3: Stack and responsibilities.</li>
-            <li>P4: Two kinds of agents.</li>
-            <li>P5: Interaction rules.</li>
-            <li>P6: Practical task-planner example.</li>
-            <li>P7: Scope for this course.</li>
-            <li>P8: Summary diagram.</li>
-            <li>P9: Checkpoint.</li>
+            <li><a class="lesson-link" href="#p2-vocabulary">P2: Vocabulary.</a></li>
+            <li><a class="lesson-link" href="#p3-stack">P3: Stack and responsibilities.</a></li>
+            <li><a class="lesson-link" href="#p4-two-agents">P4: Two kinds of agents.</a></li>
+            <li><a class="lesson-link" href="#p5-rules">P5: Interaction rules.</a></li>
+            <li><a class="lesson-link" href="#p6-practical">P6: Practical task-planner example.</a></li>
+            <li><a class="lesson-link" href="#p7-scope">P7: Scope for this course.</a></li>
+            <li><a class="lesson-link" href="#p8-summary">P8: Summary diagram.</a></li>
+            <li><a class="lesson-link" href="#p9-checkpoint">P9: Checkpoint.</a></li>
           </ul>
         </div>
         <div class="note">
@@ -57,7 +57,7 @@
             <li>What makes a system an agent (and what does not).</li>
             <li>How skills and MCP differ from tools.</li>
             <li>How the full stack is layered.</li>
-            <li>Why clear boundaries prevent architecture drift.</li>
+            <li>Why clear boundaries prevent architecture drift (roles getting mixed and confusing).</li>
           </ul>
         </div>
         <div class="example">
@@ -73,7 +73,7 @@
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">P2</span> Vocabulary</h3>
+        <h3 id="p2-vocabulary"><span class="marker">P2</span> Vocabulary</h3>
         <p>Definitions first. Precise wording helps later decisions.</p>
       </div>
       <div class="card-body">
@@ -85,6 +85,7 @@
             <li>Can run terminal commands (when allowed).</li>
             <li>Can follow project instructions such as <code>AGENTS.md</code>.</li>
             <li>Can use skills and interact with MCP-connected tooling.</li>
+            <li>These are Codex development-session capabilities, not runtime planner-agent capabilities.</li>
             <li>Specialized for code generation and project-file interaction.</li>
             <li>It is not the application that your users run.</li>
             <li>The diagram below explains development flow versus runtime flow.</li>
@@ -114,22 +115,14 @@ Runtime flow (after code exists):
 User -> runtime agent -> skills + MCP -> tools -> system state
 
 Important: runtime agent does not use Codex as a tool.</div>
-        <div class="note">
-          <h4>How this looks in our task-planner example</h4>
-          <p class="small">
-            A user asks: "Help me prepare my child's birthday party."
-            The runtime planner agent then decides steps, calls tools (for example reading current tasks or adding new tasks),
-            and updates planner data. Codex is not called during this runtime process.
-          </p>
-        </div>
         <div class="example">
-          <h4>Simple example</h4>
+          <h4>Simple generic runtime example</h4>
           <p>
-            <strong>User:</strong> "Help me prepare my child's birthday party."<br>
-            <strong>Runtime agent:</strong> decides it should first read current tasks and then add missing ones.<br>
+            <strong>User:</strong> asks for task-planning support.<br>
+            <strong>Runtime agent:</strong> decides first step and then updates plan based on results.<br>
             <strong>Skills + MCP:</strong> skills guide the reasoning of the AI/LLM model, MCP exposes task tools.<br>
-            <strong>Tools:</strong> agent calls list/add task tools.<br>
-            <strong>System state:</strong> task list is updated (for example, "Order cake", "Book playground", "Buy decorations").
+            <strong>Tools:</strong> agent calls list/add/complete task tools.<br>
+            <strong>System state:</strong> saved task data changes based on tool results.
           </p>
         </div>
       </div>
@@ -137,7 +130,7 @@ Important: runtime agent does not use Codex as a tool.</div>
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">P3</span> The stack - who does what</h3>
+        <h3 id="p3-stack"><span class="marker">P3</span> The stack - who does what</h3>
         <p>Layer clarity makes the next lessons much easier.</p>
       </div>
       <div class="card-body">
@@ -169,7 +162,7 @@ tools affect -> system state</div>
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">P4</span> Two kinds of agents</h3>
+        <h3 id="p4-two-agents"><span class="marker">P4</span> Two kinds of agents</h3>
         <p>This distinction avoids a lot of confusion later.</p>
       </div>
       <div class="card-body">
@@ -201,7 +194,7 @@ tools affect -> system state</div>
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">P5</span> Interaction rules</h3>
+        <h3 id="p5-rules"><span class="marker">P5</span> Interaction rules</h3>
         <p>These guardrails keep architecture stable as features grow.</p>
       </div>
       <div class="card-body">
@@ -229,21 +222,23 @@ tools affect -> system state</div>
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">P6</span> Practical mental example</h3>
+        <h3 id="p6-practical"><span class="marker">P6</span> Practical mental example</h3>
         <p>One scenario that ties agent, skills, and MCP together.</p>
       </div>
       <div class="card-body">
         <div class="note">
           <h4>Option 1 - No agent</h4>
           <p class="small">
-            User says: "add task buy milk" -> system writes file -> done.
+            User says: "Add task: order birthday candles" -> system writes file -> done.
             No loop, no planning, no agent.
           </p>
         </div>
         <div class="note">
           <h4>Option 2 - With agent</h4>
           <p class="small">
-            User says: "plan my week" -> agent reads tasks, prioritizes, allocates time, checks results, iterates.
+            User says: "Help me prepare my child's birthday party."
+            Agent reads tasks, prioritizes actions, adds missing steps (cake, venue, decorations),
+            checks progress, and iterates.
           </p>
         </div>
         <div class="note">
@@ -264,7 +259,7 @@ tools affect -> system state</div>
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">P7</span> Scope for this course</h3>
+        <h3 id="p7-scope"><span class="marker">P7</span> Scope for this course</h3>
         <p>What we are intentionally not using in this hands-on track.</p>
       </div>
       <div class="card-body">
@@ -294,13 +289,16 @@ tools affect -> system state</div>
           <p class="small">
             We stay local-first, practical, and budget-aware.
           </p>
+          <p class="small">
+            We exclude these on purpose so you can master core concepts without extra infrastructure complexity.
+          </p>
         </div>
       </div>
     </section>
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">P8</span> Summary diagram</h3>
+        <h3 id="p8-summary"><span class="marker">P8</span> Summary diagram</h3>
         <p>Final compression of the lesson.</p>
       </div>
       <div class="card-body">
@@ -314,7 +312,7 @@ Tools -> affect -> System</div>
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">P9</span> Checkpoint</h3>
+        <h3 id="p9-checkpoint"><span class="marker">P9</span> Checkpoint</h3>
         <p>Think first, then reveal.</p>
       </div>
       <div class="card-body">
