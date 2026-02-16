@@ -103,6 +103,8 @@ Minimum features:
 python main.py --add "Buy milk"
 python main.py --list
 python main.py --complete 1
+python main.py --delete 2
+python main.py --delete 3 4
 ```
 
 That’s it.
@@ -179,6 +181,11 @@ Step 3:
 > Now implement --complete by task ID.  
 > In-file comments: explain edge-case handling.  
 > In chat: explain state transitions and verification commands.
+
+Step 4:
+> Now implement --delete by task ID (support one or more IDs).  
+> In-file comments: explain multi-ID handling and invalid-ID behavior.  
+> In chat: explain deletion outcomes and verification commands.
 
 This forces:
 - Iterative growth

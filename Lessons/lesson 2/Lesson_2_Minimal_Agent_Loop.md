@@ -1,9 +1,9 @@
-# 🧠 Tutorial: Codex, Agents, MCP & Skills  
-# Lesson 2 — Introducing a Real Minimal Agent Loop
+# Tutorial: Codex, Agents, MCP and Skills
+# Lesson 2 - Introducing a Real Minimal Agent Loop
 
 ---
 
-## 🎯 Goal of This Lesson
+## Goal of This Lesson
 
 We now transform the deterministic CLI system into something that contains:
 
@@ -24,282 +24,330 @@ We will wrap it.
 Current system:
 
 ```
-User → CLI → Storage → JSON
+User -> CLI -> storage.py -> tasks_db.json
 ```
 
 New system:
 
 ```
 User
-  ↓
-Agent Loop
-  ↓
-Tool Call (local function)
-  ↓
-Storage → JSON
+  ->
+agent.py (loop)
+  ->
+tools.py (execution)
+  ->
+storage.py
+  ->
+tasks_db.json
 ```
 
 Important:
 
-The agent does NOT replace storage.  
+The agent does NOT replace storage.
 It sits above it.
 
 ---
 
-## 2.2 What Is an Agent in This Context?
+## 2.2 Tool Schema Concept
 
-Minimal definition for this lesson:
+Definition:
 
-An agent is:
+`schema = interface contract, implementation = behavior`
 
-1. A loop
-2. With a goal
-3. That can call tools
-4. That decides when to stop
+Meaning:
 
-We will implement:
+- Schema defines what the model is allowed to call and with what arguments.
+- Implementation defines what real code does when that tool is called.
+- Schema can exist before implementation.
 
-- Max 5 steps
-- No recursive self-prompting
-- Deterministic tool whitelist
-- Strict token budget awareness
+Schema explanation and usage examples:
+
+- Put the schema in `tools.py`.
+- Keep behavior in tool execution functions (stub first, real implementation later).
+
+Example schema snippet:
+
+```python
+# tools.py
+TOOL_SCHEMAS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_tasks",
+            "description": "Delete one or more tasks by IDs.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_ids": {"type": "array", "items": {"type": "integer"}}
+                },
+                "required": ["task_ids"],
+            },
+        },
+    }
+]
+```
 
 ---
 
-## 2.3 Budget Awareness
+## 2.3 Task 1 - Create Schema and Stubs in tools.py
 
-You allowed up to $10 total.
+Step 1 prompt:
 
-We will:
-- Use a small model
-- Limit max tokens
-- Log usage
-- Avoid multi-turn reasoning explosions
+> Create tools.py.
+> Define TOOL_SCHEMAS for:
+> - add_task(text: str)
+> - list_tasks()
+> - complete_task(task_id: int)
+> - delete_tasks(task_ids: list[int])  (one or more IDs, matching CLI: `--delete [task_id ...]`)
+> Create stub execution functions only (not implemented yet).
+> Do not call storage.py yet.
+> Add comments that explicitly teach:
+> `schema = interface contract, implementation = behavior`.
+> Explanation placement:
+> - In code comments: explain non-obvious logic and boundaries.
+> - In Codex chat response: summarize what changed and how to verify.
+> - In both: explain why schema and behavior stay separated.
 
-Expected cost for this lesson:
-Well under $1.
+Expected output after Step 1:
 
----
+- `tools.py` exists.
+- `TOOL_SCHEMAS` exists near top of file.
+- Stub execution functions exist for all tools.
+- No storage behavior is implemented yet.
 
-## 2.4 New Architecture Diagram
+Student task after Step 1:
 
-```
-main.py
-   ↓
-agent.py
-   ↓
-tools.py
-   ↓
-storage.py
-   ↓
-tasks_db.json
-```
-
-Clear layering.
-
-No shortcuts.
-
----
-
-## 2.5 Task 1 — Ask Codex to Create Agent Skeleton
-
-Open your project.
-
-Ask Codex:
-
-> Create a new file agent.py.  
-> Implement a minimal agent loop that:  
-> - Accepts a user goal string  
-> - Calls OpenAI chat completion API  
-> - Supports tool calling  
-> - Has max_steps=5  
-> - Logs each step  
-> - Does not exceed 800 tokens per call  
-> - Includes detailed comments explaining:  
->     - Where the loop is  
->     - Where tool calls are processed  
->     - Where stopping conditions are enforced  
-> Do not implement tools yet.  
-> Just stub them.
+1. Confirm schema exists in tools.py (not agent.py).
+2. Confirm delete schema uses one or more IDs.
+3. Confirm behavior is still stubbed.
 
 ---
 
-## Expected Output
+## 2.4 Task 2 - Implement the tools
 
-Codex should create:
+Step 2 prompt:
 
-```
-agent.py
-```
+> Update tools.py.
+> Keep TOOL_SCHEMAS unchanged.
+> Replace stub execution functions with real storage.py calls for:
+> - add_task
+> - list_tasks
+> - complete_task
+> - delete_tasks (one or more IDs)
+> Do not move schema into agent.py.
+> Explanation placement:
+> - In code comments: explain each tool function responsibility.
+> - In Codex chat response: summarize behavior changes and verification commands.
+> - In both: explain why execution belongs in tools/storage, not agent.
 
-Containing:
+Expected output after Step 2:
 
-- A function like `run_agent(goal: str)`
-- A loop
-- A message history list
-- Tool call detection logic
-- Stop condition
+- tools.py contains both contract and behavior.
+- delete path supports one or more IDs.
+- agent.py is still untouched.
 
----
+Student task after Step 2:
 
-## 2.6 What You Must Inspect Carefully
-
-Look for:
-
-1. Where is the loop?
-2. Where are steps counted?
-3. Where does it stop?
-4. Is the OpenAI key read from environment variable?
-5. Is temperature low?
-6. Are tool schemas defined?
-
-If any of these are sloppy — fix them.
+1. Run deterministic commands and verify behavior.
+2. Verify schema stayed in tools.py.
+3. Verify no agent or model logic was added here.
 
 ---
 
-## 2.7 Add Tool Layer (Local Only)
+## 2.5 Task 3 - Build agent.py in 4 steps
 
-Now ask Codex:
+Step 1 prompt (loop only):
 
-> Create tools.py.  
-> Define tool schemas for:  
-> - add_task(text: str)  
-> - list_tasks()  
-> - complete_task(task_id: int)  
-> These must call existing storage.py functions.  
-> Do not put business logic inside the agent.  
-> Add detailed comments explaining separation of concerns.
+> Create agent.py with a minimal loop skeleton:
+> - run_agent(goal: str)
+> - max_steps=5
+> - message history list
+> - stop conditions
+> Use a model-call stub for now (no OpenAI call yet).
+> Import TOOL_SCHEMAS from tools.py.
+> Explanation placement:
+> - In code comments: explain loop purpose and stop conditions.
+> - In Codex chat response: summarize loop flow and stop behavior.
+> - In both: explain why model and tools remain stubbed in Step 1.
 
-Important principle:
+Expected output after Agent Step 1:
 
-The agent never edits JSON.
+- agent.py exists with bounded loop skeleton.
+- model interaction is still stubbed.
 
-It only calls tools.
+Step 2 prompt (logger):
+
+> Update agent.py logging.
+> Logging requirements:
+> - Use Python logging module (not print)
+> - Configure format: "%(asctime)s [%(levelname)s] %(message)s"
+> - Log events: agent_start, step_start, tool_called, tool_result, stop, error
+> - Include `step=<n>/<max_steps>` when relevant
+> - Include stop reason in stop logs
+> - Do not log secrets
+> Explanation placement:
+> - In code comments: explain what each log event represents.
+> - In Codex chat response: summarize log format and where events appear.
+> - In both: explain why logging is added before live model calls.
+
+Expected output after Agent Step 2:
+
+- logging contract is implemented.
+- step and stop reason fields exist where relevant.
+
+Step 3 prompt (wire tools):
+
+> Update agent.py.
+> Replace tool-execution stub with real calls to tools.py execution layer.
+> Keep model interaction stubbed for now.
+> Do not change loop structure.
+> Explanation placement:
+> - In code comments: explain tool dispatch path.
+> - In Codex chat response: summarize which files changed and why.
+> - In both: explain why loop control must remain unchanged.
+
+Expected output after Agent Step 3:
+
+- tool calls execute through tools.py.
+- model call is still stubbed.
+
+Step 4 prompt (OpenAI call):
+
+> Update agent.py.
+> Replace model-call stub with real OpenAI integration.
+> Requirements:
+> - API key from environment variable
+> - low temperature
+> - max token cap (<= 800) using model-compatible parameter:
+>   - use `max_completion_tokens` for reasoning models
+>   - use `max_tokens` for models that require it
+> - pass tools=TOOL_SCHEMAS
+> - keep existing loop/logging/tool execution flow unchanged
+> Explanation placement:
+> - In code comments: explain API-key loading and token-parameter choice.
+> - In Codex chat response: summarize model-call settings and error handling.
+> - In both: explain why this step changes only model interaction.
+
+OpenAI API key concept and Windows PowerShell setup:
+
+Concept:
+
+- `OPENAI_API_KEY` is a secret credential used by your runtime app to authenticate with OpenAI.
+- Never hardcode it in source files.
+- Never commit it to git.
+- Load it from environment variables at runtime.
+
+Windows PowerShell (session only):
+
+```powershell
+$env:OPENAI_API_KEY = "your_key_here"
+```
+
+Expected output after Agent Step 4:
+
+- OpenAI interaction is live.
+- loop + logger + tools still work as before.
+
+Student task for Step 4:
+
+1. Set your API key for the current shell:
+
+```powershell
+$env:OPENAI_API_KEY = "your_key_here"
+```
+
+2. Confirm `agent.py` reads key from environment variable only.
+3. Do not run end-to-end goal yet; first full run happens in 2.6 after CLI wiring.
+
+Student task after each agent step:
+
+1. Confirm each step only changes intended code.
+2. Confirm model call stays stubbed until Step 4.
+3. After each step, explain which layer changed (agent, tools, or storage) and why that layer owns the change.
 
 ---
 
-## 2.8 Connect Agent to CLI
+## 2.6 Task 4 - Connect agent to CLI
 
-Modify `main.py`:
+Step prompt:
 
-Add a new command:
+> Modify main.py:
+> Add a new command:
+> `python main.py --goal "Plan my tasks for today"`
+> Route it to:
+> `agent.run_agent(goal)`
+> Keep existing deterministic commands working unchanged.
+> Explanation placement:
+> - In code comments: explain shared backend entry points between deterministic CLI and goal path.
+> - In Codex chat response: summarize compatibility checks and regression verification.
+> - In both: explain why this adds a layer instead of replacing deterministic commands.
 
-```
-python main.py --goal "Plan my tasks for today"
-```
+Expected output after this stage:
 
-Instead of calling storage directly, this should:
+- goal path is active.
+- deterministic commands still work.
+- boundaries remain clean.
 
-```
-agent.run_agent(goal)
-```
+Student task:
 
-But:
-
-Keep old deterministic commands working.
-
-We are adding a layer, not replacing it.
-
----
-
-## 2.9 What the Agent Should Be Able to Do
-
-Example interaction:
-
-User:
-
-```
-python main.py --goal "Add buy milk and then show me all tasks"
-```
-
-Agent:
-
-1. Decides to call add_task  
-2. Decides to call list_tasks  
-3. Stops
-
-That’s it.
-
-No planning intelligence yet.
-
-Just loop + tool execution.
+1. Run deterministic commands and verify no regressions.
+2. Run one goal command and inspect logs.
+3. Confirm storage remains model-agnostic.
 
 ---
 
-## 2.10 Agent Loop Diagram
+## 2.7 Tool Schema Checklist
 
+What to check:
+
+- `TOOL_SCHEMAS` exists in tools.py.
+- one entry per tool.
+- each entry has `type`, `function.name`, `function.description`, `function.parameters`.
+- parameters use JSON-schema-like shape (`type`, `properties`, `required`).
+- agent imports schema and passes `tools=TOOL_SCHEMAS`.
+
+Minimal example:
+
+```python
+TOOL_SCHEMAS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_tasks",
+            "description": "Delete one or more tasks by task IDs.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_ids": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                    }
+                },
+                "required": ["task_ids"],
+            },
+        },
+    }
+]
 ```
-goal = user input
-
-for step in range(max_steps):
-    call model
-    if model requests tool:
-        execute tool
-        append tool result
-    else:
-        break
-
-return final answer
-```
-
-If your code does not look like this —  
-you do not have a real agent.
 
 ---
 
-## 2.11 Guardrails
-
-You must ensure:
-
-- max_steps hard limited  
-- No while True loops  
-- No recursive self calls  
-- Tool whitelist  
-- Graceful failure if tool unknown  
-
-This prevents runaway costs.
-
----
-
-## 2.12 Where Codex Ends and Runtime Begins
-
-Codex:
-- Writes agent.py
-
-Runtime:
-- Executes agent.py
-
-This separation is critical.
-
-Codex is not in the execution loop.
-
----
-
-## 🎯 Lesson 2 Checkpoint
+## 2.8 Checkpoint
 
 Answer clearly:
 
-1. Who owns the loop?  
-2. Who executes tools?  
-3. Where does token usage occur?  
-4. Can MCP server replace tools.py?  
-5. Does storage know that an agent exists?  
-
-If these are clear,  
-you understand the difference between:
-
-- Deterministic app  
-- Agent-wrapped app  
+1. Where does schema live in this lesson?
+2. Why can schema exist before implementation?
+3. At which step does OpenAI interaction become real?
+4. Who owns loop control?
+5. Does storage know that an agent exists?
 
 ---
 
-## 🔜 Next Lesson Preview
+## Next Lesson Preview
 
 Lesson 3 will:
 
-- Replace local tools with a minimal MCP server  
-- Keep agent unchanged  
-- Demonstrate decoupling  
-- Show why MCP exists  
-
-You will see architecture separation become real.
+- replace local tool execution with MCP boundary,
+- keep the loop structure stable,
+- show decoupling in practice.

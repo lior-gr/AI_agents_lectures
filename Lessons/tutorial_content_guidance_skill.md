@@ -147,6 +147,17 @@ Use it as a quality checklist when writing or revising any lesson.
      - for critical logic where maintainers need code-local context and students need reasoning context.
 - Never leave explanation placement ambiguous; prompt text must name the target channel explicitly.
 
+## 19) New-term onboarding rule (mandatory)
+
+- When a lesson introduces a new technical term (for example "tool schema"), include a dedicated explainer block near first use.
+- The explainer should include:
+  1. Plain-language definition.
+  2. Why it matters in this lesson.
+  3. Where the student should find it in code.
+  4. A short concrete example/snippet.
+  5. A verification checklist the student can apply.
+- Do not assume students can validate a concept if the term is not defined first.
+
 ## Quick author checklist
 
 - Is naming consistent (`Lesson N`)?
@@ -166,3 +177,4 @@ Use it as a quality checklist when writing or revising any lesson.
 - Was a Markdown-vs-HTML comparison phase completed for this lesson?
 - Was a close-the-gap pass completed to resolve missing/weak source content?
 - Do prompts explicitly separate comment explanations vs chat explanations vs both?
+- Are new terms defined with example + "where to find it" + verification checklist?
