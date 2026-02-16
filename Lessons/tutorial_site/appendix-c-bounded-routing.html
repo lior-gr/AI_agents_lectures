@@ -1,0 +1,172 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Appendix C - Bounded routing | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Multiple skills</a>
+    <a href="appendix-b-skill-router.html">Appendix B - Skill router code</a>
+    <a class="active" href="appendix-c-bounded-routing.html">Appendix C - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Appendix C - Bounded model-assisted skill routing</h2>
+      <p>
+        This is the next step after deterministic keyword routing.
+        You keep model flexibility for intent classification while enforcing strict validation.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">C</span> Concept before coding</h3>
+        <p>Model helps choose from a fixed enum, validator enforces the contract.</p>
+      </div>
+      <div class="card-body">
+        <div class="diagram">goal text -> router model call -> JSON output -> deterministic validator ->
+selected skills -> prompt construction -> unchanged agent loop</div>
+        <div class="note">
+          <h4>Safety contract</h4>
+          <ul>
+            <li>Allowed skills are fixed in code.</li>
+            <li>Router output must be strict JSON with exact keys.</li>
+            <li>Invalid output triggers retry.</li>
+            <li>No keyword fallback in this mode.</li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Simple example</h4>
+          <p>
+            Router returns unknown skill name -> validator rejects -> retry until max attempts -> fail state.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">C</span> Create dedicated router module</h3>
+        <p>Keep it pure Python and testable.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="c-prompt-router">Copy</button>
+            </div>
+            <pre id="c-prompt-router" class="code">Create a new file skill_router.py.
+Implement a bounded model-assisted router:
+route_skills_with_model(goal: str, call_model_fn, max_attempts: int) -> (ok, skills, reason)
+The router must:
+- Build a routing prompt that lists allowed skill enum and descriptions
+- Demand JSON only
+- Validate JSON deterministically
+- Retry until success or fail state after max_attempts
+- No keyword fallback
+Keep code standard library only (json, typing).
+Add comments explaining why this is safe and debuggable.
+Use ASCII only in strings.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Verify unknown skills, duplicate skills, wrong keys, and non-JSON are rejected.</li>
+              <li>Verify exported symbols include <code>ALLOWED_SKILLS</code> and router function.</li>
+              <li>Verify code is independent and unit-test friendly.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">C</span> Wire cheap router call path into agent</h3>
+        <p>Routing should be low-cost and not affect loop mechanics.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="c-prompt-wire">Copy</button>
+            </div>
+            <pre id="c-prompt-wire" class="code">In agent.py, create helper call_router_model(messages) -> str:
+- low temperature (0 or close)
+- small max_output_tokens
+- return raw text only
+Then wire it into route_skills_with_model.
+
+Prompt construction behavior:
+1) Always load skills/always_on.md
+2) Route optional skills via route_skills_with_model(..., max_attempts=3)
+3) If routing fails, use always_on only
+4) Concatenate skill text with "\\n\\n---\\n\\n"
+
+Requirements:
+- Do not change agent loop structure
+- Do not change tool execution logic
+- Add comments: routing affects reasoning only</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Confirm main model call path is unchanged.</li>
+              <li>Confirm router stage appears in progress/debug log.</li>
+              <li>Confirm fail-state behavior uses always_on only.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="checkpoint">
+          <h4>Checkpoint</h4>
+          <ol class="qa">
+            <li>
+              Who controls allowed skill names?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="c-a1">Reveal answer</button>
+                <span id="c-a1" class="answer">The deterministic enum and validator in router code.</span>
+              </div>
+            </li>
+            <li>
+              What happens after max failed routing attempts?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="c-a2">Reveal answer</button>
+                <span id="c-a2" class="answer">Fail state: continue with always_on only.</span>
+              </div>
+            </li>
+            <li>
+              Does this change control flow?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="c-a3">Reveal answer</button>
+                <span id="c-a3" class="answer">No. It changes reasoning input, not loop mechanics.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="appendix-b-skill-router.html">Back: Appendix B</a>
+          <a class="lesson-link" href="index.html">Back to overview</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

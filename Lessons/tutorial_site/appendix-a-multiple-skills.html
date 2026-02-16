@@ -1,0 +1,158 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Appendix A - Multiple skills | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a class="active" href="appendix-a-multiple-skills.html">Appendix A - Multiple skills</a>
+    <a href="appendix-b-skill-router.html">Appendix B - Skill router code</a>
+    <a href="appendix-c-bounded-routing.html">Appendix C - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Appendix A - Multiple skills and skill selection</h2>
+      <p>
+        This appendix helps you scale from one skill to several skills without losing clarity.
+        You will keep skill usage structured and deterministic.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">A</span> Concept before coding</h3>
+        <p>Use multiple skills like modules with clear responsibilities.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Common skill groups</h4>
+          <ul>
+            <li><strong>Always-on skill:</strong> global constraints and policy.</li>
+            <li><strong>Domain skill:</strong> planning or reporting logic.</li>
+            <li><strong>Output skill:</strong> formatting preferences.</li>
+          </ul>
+        </div>
+        <div class="diagram">Recommended order:
+1) always_on
+2) domain skill
+3) output skill</div>
+        <div class="example">
+          <h4>Simple example</h4>
+          <p>
+            Goal: "Plan my tasks in markdown table."<br>
+            Useful stack: <code>always_on + task_planning + output_format</code>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">A</span> Create multiple skill files</h3>
+        <p>Keep each skill focused and execution-free.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="a-prompt-files">Copy</button>
+            </div>
+            <pre id="a-prompt-files" class="code">Create these files under skills/:
+- always_on.md
+- task_planning.md
+- status_reporting.md
+- output_format.md
+Each file should clearly state:
+- When it applies
+- What it changes about reasoning
+- What it must never do (no execution)
+Use concise bullet rules.
+Add a short comment block at the top: "This is a skill, not a tool."</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Check none of the skills contain tool execution details.</li>
+              <li>Check naming is consistent and easy to map.</li>
+              <li>Check each skill has clear apply/do-not-do sections.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">A</span> Add deterministic skill loading</h3>
+        <p>Predictable routing first, model routing later.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="a-prompt-router">Copy</button>
+            </div>
+            <pre id="a-prompt-router" class="code">In agent.py, implement a function load_skills(goal: str) -> str that:
+- Always loads skills/always_on.md
+- Conditionally loads other skills using deterministic keyword rules
+- Returns a single concatenated string to inject into the system prompt
+Requirements:
+- Do not change the agent loop
+- Do not change tool execution
+- Add comments explaining ordering and why routing is deterministic</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Test goals for planning, reporting, and formatting.</li>
+              <li>Verify selected skills appear in expected order.</li>
+              <li>Confirm MCP/tool execution path remains unchanged.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="checkpoint">
+          <h4>Checkpoint</h4>
+          <ol class="qa">
+            <li>
+              Are skills executed or injected?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="a-a1">Reveal answer</button>
+                <span id="a-a1" class="answer">Injected into prompt context; they are not executors.</span>
+              </div>
+            </li>
+            <li>
+              Is this router deterministic or model-driven?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="a-a2">Reveal answer</button>
+                <span id="a-a2" class="answer">Deterministic (keyword rules and fixed order).</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="lesson-5-ui-boundary.html">Back: Lesson 5</a>
+          <a class="lesson-link" href="appendix-b-skill-router.html">Next: Appendix B</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

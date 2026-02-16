@@ -1,0 +1,166 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 3 - MCP decoupling | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a class="active" href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Multiple skills</a>
+    <a href="appendix-b-skill-router.html">Appendix B - Skill router code</a>
+    <a href="appendix-c-bounded-routing.html">Appendix C - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Lesson 3 - Decouple execution with a minimal MCP boundary</h2>
+      <p>
+        We move tool execution behind a subprocess boundary, while keeping the same agent loop.
+        This is where architecture separation becomes real.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">L3</span> Concept before coding</h3>
+        <p>The agent should not care where tools run.</p>
+      </div>
+      <div class="card-body">
+        <div class="diagram">Before: agent.py -> tools.py -> storage.py
+
+After:  agent.py -> mcp_client.py -> mcp_server.py -> storage.py</div>
+        <div class="note">
+          <h4>What must stay unchanged</h4>
+          <ul>
+            <li>Agent loop structure.</li>
+            <li>Step counting and stop conditions.</li>
+            <li>Token handling path.</li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Simple example</h4>
+          <p>
+            Agent asks for <code>list_tasks</code>. It should not matter if that call is local or via subprocess.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">L3</span> Create MCP server</h3>
+        <p>Keep it synchronous and deterministic.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l3-prompt-server">Copy</button>
+            </div>
+            <pre id="l3-prompt-server" class="code">Create mcp_server.py.
+Requirements:
+- Runs as a standalone Python process
+- Reads JSON messages from stdin
+- Writes JSON responses to stdout
+- Supports:
+  - add_task
+  - list_tasks
+  - complete_task
+- Calls storage.py internally
+- Includes detailed comments explaining:
+  - Message format
+  - Tool dispatch
+  - Why this is decoupled from the agent
+Keep it synchronous and simple.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Validate request/response JSON format exactly.</li>
+              <li>Confirm no OpenAI calls exist in server code.</li>
+              <li>Confirm server handles unknown tool requests clearly.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">L3</span> Create MCP client and rewire agent</h3>
+        <p>Execution plumbing changes only.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l3-prompt-client">Copy</button>
+            </div>
+            <pre id="l3-prompt-client" class="code">Create mcp_client.py.
+Requirements:
+- Starts mcp_server.py as subprocess
+- Sends JSON requests
+- Receives JSON responses
+- Handles errors gracefully
+Explains:
+- Why subprocess boundary matters
+- How this simulates real MCP architecture
+
+Modify agent.py so tool calls go through mcp_client.py instead of tools.py.
+Do not modify the agent loop structure.
+Only replace the execution layer.
+Add comments explaining why the agent remains unchanged.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Confirm loop logic, stop conditions, token handling, and step counter are untouched.</li>
+              <li>Run one goal and inspect logs to confirm MCP path is active.</li>
+              <li>If loop logic changed, refactor and try again.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="checkpoint">
+          <h4>Checkpoint</h4>
+          <ol class="qa">
+            <li>
+              Does MCP server decide what action comes next?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l3-a1">Reveal answer</button>
+                <span id="l3-a1" class="answer">No. The agent decides; MCP executes.</span>
+              </div>
+            </li>
+            <li>
+              Should the agent loop change in this lesson?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l3-a2">Reveal answer</button>
+                <span id="l3-a2" class="answer">No. Only execution plumbing should change.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="lesson-2-agent-loop.html">Back: Lesson 2</a>
+          <a class="lesson-link" href="lesson-4-skills.html">Next: Lesson 4</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

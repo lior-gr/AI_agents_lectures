@@ -1,0 +1,1156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex, Agents, MCP, and Skills - Full Tutorial</title>
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap");
+
+    :root {
+      --bg-a: #f6fbff;
+      --bg-b: #fef8ef;
+      --ink: #1f2933;
+      --muted: #52606d;
+      --panel: #ffffff;
+      --border: #d9e2ec;
+      --brand: #0b63f6;
+      --accent: #00a6a6;
+      --dark: #0f172a;
+      --shadow: 0 16px 40px rgba(15, 23, 42, 0.10);
+      --mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+      --ui: "Sora", "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      font-family: var(--ui);
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 8%, #d5ecff 0, transparent 26%),
+        radial-gradient(circle at 85% 0%, #ffe4d5 0, transparent 22%),
+        linear-gradient(180deg, var(--bg-a), var(--bg-b));
+      scroll-behavior: smooth;
+    }
+
+    body {
+      display: grid;
+      grid-template-columns: 290px 1fr;
+      gap: 24px;
+    }
+
+    .sidebar {
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 28px 18px 24px;
+      background: linear-gradient(180deg, #0a1a35, #142850);
+      color: #dbeafe;
+      border-right: 1px solid rgba(219, 234, 254, 0.16);
+    }
+
+    .sidebar h1 {
+      font-size: 1rem;
+      line-height: 1.4;
+      margin: 0 0 16px;
+      letter-spacing: 0.02em;
+    }
+
+    .sidebar p {
+      margin: 0 0 20px;
+      font-size: 0.75rem;
+      color: #bfdbfe;
+    }
+
+    .sidebar a {
+      display: block;
+      color: #e5edff;
+      text-decoration: none;
+      padding: 9px 10px;
+      margin: 4px 0;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      transition: 150ms ease;
+      border: 1px solid transparent;
+    }
+
+    .sidebar a:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    main {
+      width: min(1200px, 100%);
+      padding: 24px 24px 60px 0;
+    }
+
+    .hero {
+      background: linear-gradient(130deg, rgba(11, 99, 246, 0.95), rgba(0, 166, 166, 0.95));
+      color: #f8fbff;
+      border-radius: 18px;
+      padding: 30px 28px;
+      box-shadow: var(--shadow);
+      margin-bottom: 22px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    .hero h2 {
+      margin: 0 0 10px;
+      font-size: clamp(1.45rem, 2.4vw, 2.1rem);
+      letter-spacing: 0.01em;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 1000px;
+      color: rgba(248, 251, 255, 0.92);
+      line-height: 1.7;
+      font-size: 0.96rem;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      margin: 0 0 18px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      border-bottom: 1px solid var(--border);
+      padding: 18px 22px;
+      background: linear-gradient(180deg, #ffffff, #f7fbff);
+    }
+
+    .panel-header h3 {
+      margin: 0;
+      font-size: 1.07rem;
+      letter-spacing: 0.01em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .panel-header p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    .panel-body { padding: 18px 22px 22px; }
+    .lesson-title { margin: 0 0 10px; font-size: 1.2rem; color: #102a43; }
+    .lesson-intro { margin: 0 0 14px; color: var(--muted); line-height: 1.65; font-size: 0.9rem; }
+
+    .marker {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 38px;
+      height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #0b63f6, #0b4ec2);
+      color: #eef4ff;
+      font-size: 0.67rem;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      border: 1px solid rgba(11, 99, 246, 0.5);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+
+    .legend-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(260px, 1fr));
+      gap: 14px;
+    }
+
+    .legend-card {
+      border-radius: 12px;
+      padding: 14px;
+      border: 1px solid;
+    }
+
+    .legend-card h4 { margin: 0 0 6px; font-size: 0.9rem; }
+    .legend-card p { margin: 0; font-size: 0.82rem; line-height: 1.55; }
+    .legend-card.prompt { border-color: #27364d; background: #111827; color: #dbeafe; }
+    .legend-card.task { border-color: #f8b57a; background: #fff5eb; color: #7b341e; }
+
+    .k-block {
+      background: #f8fbff;
+      border: 1px solid #d8e6f9;
+      border-radius: 12px;
+      padding: 12px;
+      margin: 12px 0;
+    }
+
+    .k-block h5 { margin: 0 0 8px; font-size: 0.86rem; color: #102a43; letter-spacing: 0.01em; }
+    .k-block ul { margin: 0; padding-left: 18px; color: #334e68; line-height: 1.7; font-size: 0.84rem; }
+
+    .diagram {
+      margin: 12px 0;
+      background: #0f172a;
+      color: #dbeafe;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      line-height: 1.5;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+
+    .interaction-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 14px;
+      margin: 14px 0 6px;
+    }
+
+    .prompt-card,
+    .task-card {
+      border-radius: 12px;
+      border: 1px solid;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .prompt-card { border-color: #2f3c4f; background: #111827; color: #e5edff; }
+    .task-card { border-color: #ffd2ad; background: #fff8f1; color: #7c2d12; }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      border-bottom: 1px solid;
+    }
+
+    .prompt-card .card-head { border-bottom-color: #2f3c4f; background: #1e293b; color: #dbeafe; }
+    .task-card .card-head { border-bottom-color: #ffd2ad; background: #ffe8d3; color: #9a3412; }
+
+    .copy-btn {
+      border: 1px solid #5b8dea;
+      border-radius: 6px;
+      padding: 5px 9px;
+      color: #dbeafe;
+      background: #0b63f6;
+      cursor: pointer;
+      font-family: var(--ui);
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      transition: 150ms ease;
+    }
+
+    .copy-btn:hover { background: #175fe0; }
+
+    pre {
+      margin: 0;
+      padding: 14px 12px;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .task-card ul { margin: 0; padding: 12px 18px 14px 28px; font-size: 0.82rem; line-height: 1.65; }
+    .task-card li + li { margin-top: 8px; }
+
+    .checkpoint {
+      border: 1px solid #facc15;
+      background: #fffdf2;
+      border-radius: 12px;
+      padding: 14px;
+      margin-top: 14px;
+    }
+
+    .checkpoint h5 { margin: 0 0 10px; font-size: 0.86rem; color: #854d0e; letter-spacing: 0.01em; }
+    .qa { margin: 0; padding-left: 18px; display: grid; gap: 10px; }
+    .qa li { font-size: 0.82rem; color: #5f370e; line-height: 1.5; }
+
+    .answer-row {
+      margin-top: 6px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .reveal-btn {
+      border: 1px solid #f59e0b;
+      background: #fff7db;
+      color: #7c2d12;
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-family: var(--ui);
+      font-size: 0.72rem;
+      cursor: pointer;
+    }
+
+    .answer {
+      display: none;
+      border: 1px solid #fde68a;
+      background: #fffbeb;
+      color: #78350f;
+      border-radius: 8px;
+      padding: 6px 8px;
+      font-size: 0.76rem;
+      line-height: 1.55;
+      max-width: 100%;
+    }
+
+    .answer.visible { display: inline-block; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin: 10px 0; }
+    th, td { border: 1px solid #d9e2ec; text-align: left; padding: 8px; vertical-align: top; }
+    th { background: #f0f7ff; color: #102a43; font-size: 0.79rem; }
+    .fine-print { margin: 0; color: #486581; font-size: 0.78rem; line-height: 1.55; }
+
+    .footer-note {
+      margin-top: 18px;
+      border: 1px dashed #9fb3c8;
+      border-radius: 12px;
+      padding: 12px;
+      font-size: 0.8rem;
+      color: #334e68;
+      background: #f8fbff;
+    }
+
+    @media (max-width: 1080px) {
+      body { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; padding-bottom: 18px; }
+      main { padding: 0 12px 40px; }
+      .legend-grid, .interaction-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <h1>Full Tutorial: Codex, Agents, MCP, Skills</h1>
+    <p>One visual system for all lessons: same colors, same headline format, same interaction cards.</p>
+    <a href="#how-to-use">How To Use This Tutorial</a>
+    <a href="#part-0">Part 0 - Foundations</a>
+    <a href="#lesson-1">Lesson 1 - Baseline</a>
+    <a href="#lesson-2">Lesson 2 - Agent Loop</a>
+    <a href="#lesson-3">Lesson 3 - MCP Decoupling</a>
+    <a href="#lesson-4">Lesson 4 - Skills</a>
+    <a href="#lesson-5">Lesson 5 - UI Boundary</a>
+    <a href="#appendix-a">Appendix A - Multiple Skills</a>
+    <a href="#appendix-b">Appendix B - Deterministic Router</a>
+    <a href="#appendix-c">Appendix C - Bounded Model Router</a>
+  </aside>
+
+  <main>
+    <header class="hero">
+      <h2>Codex, Agents, MCP, and Skills - Full Practical Tutorial</h2>
+      <p>
+        This tutorial is built for high clarity and strict architecture discipline. Each lesson has two explicit tracks:
+        the exact prompt you paste into Codex, and the student tasks you perform after code generation to verify, learn,
+        and harden the result.
+      </p>
+    </header>
+
+    <section id="how-to-use" class="panel">
+      <div class="panel-header">
+        <h3><span class="marker">Guide</span> How To Use This Tutorial</h3>
+        <p>
+          This page resolves the ambiguity between prompt text and student instruction. Use the legend below in every lesson.
+        </p>
+      </div>
+      <div class="panel-body">
+        <div class="legend-grid">
+          <article class="legend-card prompt">
+            <h4>Prompt to paste into Codex</h4>
+            <p>This block is copied directly into the Codex chat. It tells Codex what to implement or modify.</p>
+          </article>
+          <article class="legend-card task">
+            <h4>Student task after generation</h4>
+            <p>This is your manual review and learning step. You validate architecture and behavior before moving on.</p>
+          </article>
+        </div>
+        <p class="footer-note">
+          Process rule for each section: 1) send prompt to Codex, 2) review output with student checklist,
+          3) answer checkpoint questions, 4) move to next section only after confidence is high.
+        </p>
+      </div>
+    </section>
+
+    <section id="part-0" class="panel">
+      <div class="panel-header">
+        <h3 class="lesson-title"><span class="marker">P0</span> Part 0 - Foundations and Mental Models</h3>
+        <p class="lesson-intro">Core vocabulary and interaction boundaries: Codex, Agent, Skill, MCP server, and tools.</p>
+      </div>
+      <div class="panel-body">
+        <div class="k-block">
+          <h5>Vocabulary summary</h5>
+          <ul>
+            <li>Codex is a development assistant, not your production runtime.</li>
+            <li>An agent owns a goal-driven loop: plan, act, observe, decide, repeat or stop.</li>
+            <li>A skill is passive reasoning guidance, not an executor.</li>
+            <li>An MCP server is a passive tool provider behind a boundary.</li>
+          </ul>
+        </div>
+        <div class="diagram">Human -> Codex (development) -> Project files -> Runtime app
+Human -> Runtime agent -> Skills (reasoning) + MCP (execution boundary) -> Tools -> System</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Allowed</th>
+              <th>Not allowed</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Agent calls tools via boundary</td>
+              <td>MCP server plans tasks</td>
+            </tr>
+            <tr>
+              <td>Skill shapes reasoning</td>
+              <td>Skill runs subprocesses</td>
+            </tr>
+            <tr>
+              <td>Codex edits source code</td>
+              <td>Codex used as production backend</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="checkpoint">
+          <h5>Checkpoint (click to reveal answers)</h5>
+          <ol class="qa">
+            <li>
+              Does a skill ever run a subprocess?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a0-1">Reveal answer</button>
+                <span id="a0-1" class="answer">No. A skill is prompt-space guidance only.</span>
+              </div>
+            </li>
+            <li>
+              Does an MCP server decide when to call tools?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a0-2">Reveal answer</button>
+                <span id="a0-2" class="answer">No. The agent decides; MCP executes requests.</span>
+              </div>
+            </li>
+            <li>
+              Who owns the loop in an agent system?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a0-3">Reveal answer</button>
+                <span id="a0-3" class="answer">The runtime agent logic owns the loop.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="lesson-1" class="panel">
+      <div class="panel-header">
+        <h3 class="lesson-title"><span class="marker">L1</span> Lesson 1 - Build a deterministic baseline (no agent yet)</h3>
+        <p class="lesson-intro">Build a non-agent CLI first so agent behavior can be measured later against a stable baseline.</p>
+      </div>
+      <div class="panel-body">
+        <div class="diagram">User -> CLI (main.py) -> Storage (storage.py) -> tasks_db.json</div>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-target="l1-prompt">Copy</button>
+            </div>
+            <pre id="l1-prompt">Create a minimal cross-platform Python CLI project for a task manager.
+Requirements:
+- Must work on Windows first
+- Use argparse
+- Store tasks in tasks_db.json
+- Create virtual environment instructions
+- Add comments explaining each file
+Do NOT implement advanced features yet.</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student task after generation</span></div>
+            <ul>
+              <li>Verify separation: CLI in <code>main.py</code>, persistence in <code>storage.py</code>.</li>
+              <li>Confirm Windows PowerShell setup instructions in <code>README.md</code>.</li>
+              <li>Check there are no agent, OpenAI, MCP, or skill features yet.</li>
+              <li>Run deterministic commands: add, list, complete.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt sequence for controlled growth</span>
+              <button class="copy-btn" data-target="l1-seq">Copy</button>
+            </div>
+            <pre id="l1-seq">Implement only the --add command. Include detailed comments. Do not implement listing yet.
+
+Now implement --list. Explain how indexing works.
+
+Now implement --complete by task ID.</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student review target</span></div>
+            <ul>
+              <li>Verify incremental diffs are small and understandable.</li>
+              <li>Reject premature AI planning behavior.</li>
+              <li>Confirm architecture remains clean for later layering.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="checkpoint">
+          <h5>Lesson 1 checkpoint</h5>
+          <ol class="qa">
+            <li>
+              Does this baseline contain an agent?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a1-1">Reveal answer</button>
+                <span id="a1-1" class="answer">No. It is deterministic command execution only.</span>
+              </div>
+            </li>
+            <li>
+              Should <code>storage.py</code> call OpenAI?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a1-2">Reveal answer</button>
+                <span id="a1-2" class="answer">No. Storage is persistence only.</span>
+              </div>
+            </li>
+            <li>
+              Is Codex part of runtime?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a1-3">Reveal answer</button>
+                <span id="a1-3" class="answer">No. Codex is a development-time assistant.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="lesson-2" class="panel">
+      <div class="panel-header">
+        <h3 class="lesson-title"><span class="marker">L2</span> Lesson 2 - Add a minimal real agent loop</h3>
+        <p class="lesson-intro">Introduce loop control, model calls, tool calling, and deterministic guardrails without breaking baseline behavior.</p>
+      </div>
+      <div class="panel-body">
+        <div class="diagram">main.py -> agent.py -> tools.py -> storage.py -> tasks_db.json</div>
+        <div class="k-block">
+          <h5>Guardrails</h5>
+          <ul>
+            <li>Hard <code>max_steps</code> limit.</li>
+            <li>Tool whitelist only.</li>
+            <li>No unbounded loops.</li>
+            <li>Low-temperature execution and token budget caps.</li>
+          </ul>
+        </div>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt to create agent loop</span>
+              <button class="copy-btn" data-target="l2-agent">Copy</button>
+            </div>
+            <pre id="l2-agent">Create a new file agent.py.
+Implement a minimal agent loop that:
+- Accepts a user goal string
+- Calls OpenAI chat completion API
+- Supports tool calling
+- Has max_steps=5
+- Logs each step
+- Does not exceed 800 tokens per call
+Includes detailed comments explaining:
+- Where the loop is
+- Where tool calls are processed
+- Where stopping conditions are enforced
+Do not implement tools yet. Just stub them.</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student task after generation</span></div>
+            <ul>
+              <li>Find and mark exact loop region and step counter logic.</li>
+              <li>Verify API key is read from environment variable.</li>
+              <li>Verify stop conditions are explicit and deterministic.</li>
+              <li>Confirm model temperature is intentionally low.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt for tool layer and CLI bridge</span>
+              <button class="copy-btn" data-target="l2-tools">Copy</button>
+            </div>
+            <pre id="l2-tools">Create tools.py.
+Define tool schemas for:
+- add_task(text: str)
+- list_tasks()
+- complete_task(task_id: int)
+These must call existing storage.py functions.
+Do not put business logic inside the agent.
+Add detailed comments explaining separation of concerns.
+
+Modify main.py:
+Add a new command:
+python main.py --goal "Plan my tasks for today"
+This should call:
+agent.run_agent(goal)
+Keep old deterministic commands working.</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student validation target</span></div>
+            <ul>
+              <li>Check deterministic commands still work exactly as before.</li>
+              <li>Run one goal: "Add buy milk and then show me all tasks".</li>
+              <li>Expect tool sequence: add, list, stop.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="checkpoint">
+          <h5>Lesson 2 checkpoint</h5>
+          <ol class="qa">
+            <li>
+              Who owns the loop?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a2-1">Reveal answer</button>
+                <span id="a2-1" class="answer">The runtime agent in <code>agent.py</code>.</span>
+              </div>
+            </li>
+            <li>
+              Who executes tool effects?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a2-2">Reveal answer</button>
+                <span id="a2-2" class="answer"><code>tools.py</code> delegates to storage.</span>
+              </div>
+            </li>
+            <li>
+              Does storage know an agent exists?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a2-3">Reveal answer</button>
+                <span id="a2-3" class="answer">No. Storage remains agent-agnostic.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="lesson-3" class="panel">
+      <div class="panel-header">
+        <h3 class="lesson-title"><span class="marker">L3</span> Lesson 3 - Decouple tool execution with MCP</h3>
+        <p class="lesson-intro">Replace direct tool invocation with a subprocess boundary while preserving the existing agent loop.</p>
+      </div>
+      <div class="panel-body">
+        <div class="diagram">agent.py -> mcp_client.py -> (JSON over stdio) -> mcp_server.py -> storage.py</div>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt to create MCP server</span>
+              <button class="copy-btn" data-target="l3-server">Copy</button>
+            </div>
+            <pre id="l3-server">Create mcp_server.py.
+Requirements:
+- Runs as a standalone Python process
+- Reads JSON messages from stdin
+- Writes JSON responses to stdout
+- Supports add_task, list_tasks, complete_task
+- Calls storage.py internally
+- Includes detailed comments explaining:
+  - Message format
+  - Tool dispatch
+  - Why this is decoupled from the agent
+Keep it synchronous and simple.</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student task after generation</span></div>
+            <ul>
+              <li>Validate request shape: <code>{"tool": "...", "arguments": {...}}</code>.</li>
+              <li>Validate response shape: <code>{"status": "ok", "result": ...}</code>.</li>
+              <li>Confirm no model code exists in MCP server.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt to create MCP client and rewire agent</span>
+              <button class="copy-btn" data-target="l3-client">Copy</button>
+            </div>
+            <pre id="l3-client">Create mcp_client.py.
+Requirements:
+- Starts mcp_server.py as subprocess
+- Sends JSON requests
+- Receives JSON responses
+- Handles errors gracefully
+Explain:
+- Why subprocess boundary matters
+- How this simulates real MCP architecture
+
+Modify agent.py so tool calls go through mcp_client.py.
+Do not modify loop structure.
+Do not modify stop conditions, token handling, or step counter.
+Only replace execution plumbing.</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student verification target</span></div>
+            <ul>
+              <li>Diff should show mostly call-site changes only.</li>
+              <li>Loop mechanics should remain identical.</li>
+              <li>Tool behavior should still work end-to-end.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="checkpoint">
+          <h5>Lesson 3 checkpoint</h5>
+          <ol class="qa">
+            <li>
+              Did the agent loop change?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a3-1">Reveal answer</button>
+                <span id="a3-1" class="answer">It should not. Only execution plumbing changes.</span>
+              </div>
+            </li>
+            <li>
+              Does MCP server know OpenAI details?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a3-2">Reveal answer</button>
+                <span id="a3-2" class="answer">No. MCP executes deterministic tool requests only.</span>
+              </div>
+            </li>
+            <li>
+              Can multiple agents reuse one MCP server?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a3-3">Reveal answer</button>
+                <span id="a3-3" class="answer">Yes. That is one core decoupling benefit.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="lesson-4" class="panel">
+      <div class="panel-header">
+        <h3 class="lesson-title"><span class="marker">L4</span> Lesson 4 - Skills: reasoning injection without execution</h3>
+        <p class="lesson-intro">Add reusable skill text and inject it into system prompt. Keep loop control and tool execution untouched.</p>
+      </div>
+      <div class="panel-body">
+        <div class="k-block">
+          <h5>Separation statement</h5>
+          <ul>
+            <li>Skill modifies how the model reasons.</li>
+            <li>Skill does not execute tools.</li>
+            <li>Agent still controls flow and execution decisions.</li>
+          </ul>
+        </div>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt to create first skill file</span>
+              <button class="copy-btn" data-target="l4-skill">Copy</button>
+            </div>
+            <pre id="l4-skill">Create a new folder called skills.
+Inside it create task_planning_skill.md.
+The file should:
+- Define when this skill should be used
+- Provide structured reasoning rules for task planning
+- Define constraints (no hallucinated tasks)
+- Explain how tasks should be prioritized
+- Not include execution logic
+- Include comments explaining why this is not a tool
+This file is pure text. No Python.</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student task after generation</span></div>
+            <ul>
+              <li>Check the skill file has no function calls or execution details.</li>
+              <li>Check it defines application trigger, reasoning rules, and constraints.</li>
+              <li>Check wording is clear for someone with no schema background.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt to inject skill into system prompt</span>
+              <button class="copy-btn" data-target="l4-inject">Copy</button>
+            </div>
+            <pre id="l4-inject">Modify agent.py so that before sending messages to OpenAI,
+it loads task_planning_skill.md and injects it into the system prompt.
+The skill must:
+- Not modify loop logic
+- Not modify tool logic
+- Only affect prompt construction
+Add detailed comments explaining separation.</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student validation target</span></div>
+            <ul>
+              <li>Confirm only prompt-construction code changed.</li>
+              <li>Confirm loop, step counter, and tool execution paths are intact.</li>
+              <li>Run goal: "Plan my tasks for today" and inspect improved reasoning discipline.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="checkpoint">
+          <h5>Lesson 4 checkpoint</h5>
+          <ol class="qa">
+            <li>
+              Does a skill execute code?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a4-1">Reveal answer</button>
+                <span id="a4-1" class="answer">No. It is injected text guidance only.</span>
+              </div>
+            </li>
+            <li>
+              Where is a skill applied?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a4-2">Reveal answer</button>
+                <span id="a4-2" class="answer">In system prompt construction before model call.</span>
+              </div>
+            </li>
+            <li>
+              Does MCP know which skill was used?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a4-3">Reveal answer</button>
+                <span id="a4-3" class="answer">No. Skills are prompt-level; MCP is execution boundary.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="lesson-5" class="panel">
+      <div class="panel-header">
+        <h3 class="lesson-title"><span class="marker">L5</span> Lesson 5 - Add UI boundary without logic leakage</h3>
+        <p class="lesson-intro">Introduce a GUI layer while preserving backend behavior and avoiding duplicate logic.</p>
+      </div>
+      <div class="panel-body">
+        <div class="diagram">GUI (ui.py) -> main.py shared backend -> agent -> MCP -> storage</div>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt to create minimal UI layer</span>
+              <button class="copy-btn" data-target="l5-ui">Copy</button>
+            </div>
+            <pre id="l5-ui">Create ui.py.
+Requirements:
+- Simple window with text input, Submit button, output display
+- On Submit, call existing main application function
+- Do NOT import OpenAI here
+- Do NOT implement agent logic here
+Add comments explaining separation of concerns.</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student task after generation</span></div>
+            <ul>
+              <li>Confirm UI file has no OpenAI calls and no tool logic.</li>
+              <li>Confirm UI invokes shared backend function, not duplicated flow.</li>
+              <li>Confirm entry point remains <code>python main.py ...</code>.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt to add GUI launch mode</span>
+              <button class="copy-btn" data-target="l5-main">Copy</button>
+            </div>
+            <pre id="l5-main">Modify main.py so that:
+- It can be launched in GUI mode using --gui flag
+- GUI calls the same functions the CLI uses
+- No duplicate logic
+Add comments explaining why CLI and GUI share the same backend.
+
+Optional follow-up:
+Replace Tkinter UI with PySide6 version.
+Keep identical backend interface.
+Do not modify agent, MCP, or storage.</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student validation target</span></div>
+            <ul>
+              <li>Run CLI and GUI and compare outputs for same goal.</li>
+              <li>Verify backend modules are unchanged when UI is swapped.</li>
+              <li>If backend changed for UI, architecture needs refactor.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="checkpoint">
+          <h5>Lesson 5 checkpoint</h5>
+          <ol class="qa">
+            <li>
+              Does GUI know OpenAI details?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a5-1">Reveal answer</button>
+                <span id="a5-1" class="answer">No. GUI is boundary only.</span>
+              </div>
+            </li>
+            <li>
+              Can UI be replaced without touching agent?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a5-2">Reveal answer</button>
+                <span id="a5-2" class="answer">Yes, if shared backend interface is clean.</span>
+              </div>
+            </li>
+            <li>
+              Is CLI now just another UI boundary?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="a5-3">Reveal answer</button>
+                <span id="a5-3" class="answer">Yes. CLI and GUI should converge on shared backend logic.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section id="appendix-a" class="panel">
+      <div class="panel-header">
+        <h3 class="lesson-title"><span class="marker">A</span> Appendix A - Multiple skills and deterministic selection</h3>
+        <p class="lesson-intro">Organize global policy skills, conditional domain skills, and output-format skills with deterministic routing rules.</p>
+      </div>
+      <div class="panel-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Pattern</th>
+              <th>Purpose</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Always-on skill</td>
+              <td>Global policy, constraints, anti-hallucination guardrails.</td>
+            </tr>
+            <tr>
+              <td>Conditional domain skill</td>
+              <td>Activated for planning, status, troubleshooting, and related intents.</td>
+            </tr>
+            <tr>
+              <td>Output skill</td>
+              <td>Shapes response format after reasoning rules are chosen.</td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt to add multiple skill files</span>
+              <button class="copy-btn" data-target="a-prompt">Copy</button>
+            </div>
+            <pre id="a-prompt">Create these files under skills/:
+- always_on.md
+- task_planning.md
+- status_reporting.md
+- output_format.md
+Each file should state:
+- When it applies
+- What it changes about reasoning
+- What it must never do (no execution)
+Use concise bullet rules.
+Add this header: "This is a skill, not a tool."</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student task after generation</span></div>
+            <ul>
+              <li>Ensure consistent naming convention across all skill files.</li>
+              <li>Ensure none of the skills mention concrete tool function names.</li>
+              <li>Ensure each skill remains at reasoning level only.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="appendix-b" class="panel">
+      <div class="panel-header">
+        <h3 class="lesson-title"><span class="marker">B</span> Appendix B - Deterministic load_skills router</h3>
+        <p class="lesson-intro">A debug-friendly deterministic router for selecting optional skills from keyword triggers.</p>
+      </div>
+      <div class="panel-body">
+        <div class="k-block">
+          <h5>Ordering rule</h5>
+          <ul>
+            <li>Always inject <code>always_on</code> first.</li>
+            <li>Inject domain skills second.</li>
+            <li>Inject output format skill last.</li>
+          </ul>
+        </div>
+        <pre>def load_skills(goal: str, skills_dir: str = "skills") -> str:
+    selected = [f"{skills_dir}/always_on.md"]
+    if has_any(goal, ["plan", "organize", "schedule", "today", "this week"]):
+        selected.append(f"{skills_dir}/task_planning.md")
+    if has_any(goal, ["status", "report", "summary", "summarize"]):
+        selected.append(f"{skills_dir}/status_reporting.md")
+    if has_any(goal, ["table", "markdown", "csv", "json", "pretty"]):
+        selected.append(f"{skills_dir}/output_format.md")
+    return "\\n\\n---\\n\\n".join(read_non_empty(selected))</pre>
+        <p class="fine-print">
+          This appendix is deterministic by design. Easy to test and reason about, but weaker for synonyms.
+        </p>
+      </div>
+    </section>
+
+    <section id="appendix-c" class="panel">
+      <div class="panel-header">
+        <h3 class="lesson-title"><span class="marker">C</span> Appendix C - Bounded model-assisted skill routing</h3>
+        <p class="lesson-intro">Replace keyword routing with a bounded model classifier that outputs strict JSON and is validated deterministically.</p>
+      </div>
+      <div class="panel-body">
+        <div class="k-block">
+          <h5>Contract summary</h5>
+          <ul>
+            <li>Allowed enum only: <code>task_planning</code>, <code>status_reporting</code>, <code>output_format</code>.</li>
+            <li>Return JSON only with exact keys: <code>skills</code>, <code>confidence</code>, <code>notes</code>.</li>
+            <li>Reject unknown skills, duplicates, wrong keys, and non-JSON responses.</li>
+            <li>Retry up to <code>max_attempts</code>; no keyword fallback.</li>
+          </ul>
+        </div>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt to create bounded router</span>
+              <button class="copy-btn" data-target="c-router">Copy</button>
+            </div>
+            <pre id="c-router">Create a new file skill_router.py.
+Implement:
+route_skills_with_model(goal: str, call_model_fn, max_attempts: int) -> (ok, skills, reason)
+Requirements:
+- Build routing prompt with allowed skill enum and descriptions
+- Demand JSON only
+- Validate JSON deterministically
+- Retry until success or fail after max_attempts
+- No keyword fallback
+- Standard library only (json, typing)
+- Add comments: safe and debuggable
+- ASCII strings only</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student task after generation</span></div>
+            <ul>
+              <li>Write tests for non-JSON output, duplicate skills, unknown skill names.</li>
+              <li>Verify fail state proceeds with always_on only.</li>
+              <li>Verify main agent loop and tool path are unchanged.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="interaction-grid">
+          <article class="prompt-card">
+            <div class="card-head">
+              <span>Prompt to wire cheap routing call</span>
+              <button class="copy-btn" data-target="c-wire">Copy</button>
+            </div>
+            <pre id="c-wire">In agent.py, add helper call_router_model(messages) -> str that:
+- Uses low temperature (0 or close)
+- Uses small max_output_tokens
+- Returns raw text only
+Then wire it into route_skills_with_model.
+
+Requirements:
+- Keep main agent model call unchanged
+- Add comment that router calls must stay cheap
+- Routing affects reasoning only, not control-flow.</pre>
+          </article>
+          <article class="task-card">
+            <div class="card-head"><span>Student validation target</span></div>
+            <ul>
+              <li>Inspect logs to ensure router stage is visible in progress stream.</li>
+              <li>Verify selected skills appear under router stage in order.</li>
+              <li>Verify no fallback keyword logic exists anymore.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="checkpoint">
+          <h5>Appendix C checkpoint</h5>
+          <ol class="qa">
+            <li>
+              Who controls allowed skill set?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="ac-1">Reveal answer</button>
+                <span id="ac-1" class="answer">The deterministic enum and validator in router code.</span>
+              </div>
+            </li>
+            <li>
+              What happens on repeated invalid router outputs?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="ac-2">Reveal answer</button>
+                <span id="ac-2" class="answer">Fail state: continue with always_on only, no keyword fallback.</span>
+              </div>
+            </li>
+            <li>
+              Did routing change tool execution?
+              <div class="answer-row">
+                <button class="reveal-btn" data-target="ac-3">Reveal answer</button>
+                <span id="ac-3" class="answer">No. It changes prompt composition only.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h3><span class="marker">Flow</span> Final study flow</h3>
+        <p>Recommended order for each lesson to maximize learning and reduce post-action clarifications.</p>
+      </div>
+      <div class="panel-body">
+        <ol class="fine-print">
+          <li>Copy and run the Codex prompt block exactly.</li>
+          <li>Do the student validation checklist before requesting additional features.</li>
+          <li>Run checkpoint questions and reveal answers only after you have your own answer.</li>
+          <li>Commit working code before switching architecture layers.</li>
+          <li>When behavior is wrong, inspect logs and boundaries first, then refine prompts or validators.</li>
+        </ol>
+      </div>
+    </section>
+  </main>
+  <script>
+    (function () {
+      const copyButtons = document.querySelectorAll(".copy-btn");
+      copyButtons.forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          const id = btn.getAttribute("data-target");
+          const src = document.getElementById(id);
+          if (!src) {
+            return;
+          }
+          navigator.clipboard.writeText(src.textContent || "");
+          const original = btn.textContent;
+          btn.textContent = "Copied";
+          setTimeout(function () {
+            btn.textContent = original;
+          }, 900);
+        });
+      });
+
+      const revealButtons = document.querySelectorAll(".reveal-btn");
+      revealButtons.forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          const id = btn.getAttribute("data-target");
+          const answer = document.getElementById(id);
+          if (!answer) {
+            return;
+          }
+          const visible = answer.classList.toggle("visible");
+          btn.textContent = visible ? "Hide answer" : "Reveal answer";
+        });
+      });
+    }());
+  </script>
+</body>
+</html>

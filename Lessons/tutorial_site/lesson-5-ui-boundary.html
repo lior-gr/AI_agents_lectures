@@ -1,0 +1,156 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 5 - UI boundary | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a class="active" href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Multiple skills</a>
+    <a href="appendix-b-skill-router.html">Appendix B - Skill router code</a>
+    <a href="appendix-c-bounded-routing.html">Appendix C - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Lesson 5 - Add UI without breaking architecture</h2>
+      <p>
+        We now add a GUI layer. The key rule: UI is a boundary, not a logic center.
+        If backend layers change for UI, architecture leaked.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">L5</span> Concept before coding</h3>
+        <p>UI collects input and renders output. Nothing more.</p>
+      </div>
+      <div class="card-body">
+        <div class="diagram">GUI (ui.py) -> main.py shared backend -> agent -> MCP -> storage</div>
+        <div class="note">
+          <h4>UI must not do these</h4>
+          <ul>
+            <li>No direct OpenAI calls.</li>
+            <li>No tool execution logic.</li>
+            <li>No direct JSON writes.</li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Simple example</h4>
+          <p>
+            A submit click should call a shared backend function, not re-implement the agent loop inside UI code.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">L5</span> Create a minimal UI file</h3>
+        <p>Keep it clean and small.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l5-prompt-ui">Copy</button>
+            </div>
+            <pre id="l5-prompt-ui" class="code">Create ui.py.
+Requirements:
+- Simple window with:
+  - Text input field
+  - "Submit" button
+  - Output display area
+- When user clicks Submit:
+  - It calls existing main application function
+Do NOT import OpenAI here.
+Do NOT implement agent logic here.
+Add comments explaining separation of concerns.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Confirm UI imports only UI and shared-app modules.</li>
+              <li>Confirm no model/tool logic was copied into UI.</li>
+              <li>Confirm design remains single-entry-point friendly.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">L5</span> Wire GUI mode from main.py</h3>
+        <p>CLI and GUI should share backend paths.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l5-prompt-main">Copy</button>
+            </div>
+            <pre id="l5-prompt-main" class="code">Modify main.py so that:
+- It can be launched in GUI mode using --gui flag
+- GUI calls the same functions the CLI uses
+- No duplicate logic
+Add comments explaining why CLI and GUI share the same backend.
+
+Optional:
+Replace Tkinter UI with PySide6 version.
+Keep identical backend interface.
+Do not modify agent, MCP, or storage.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Run both CLI and GUI and compare behavior for the same goal.</li>
+              <li>Verify backend files are unchanged in responsibility.</li>
+              <li>If backend changed for UI support, refactor boundaries.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="checkpoint">
+          <h4>Checkpoint</h4>
+          <ol class="qa">
+            <li>
+              Should GUI know OpenAI details?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l5-a1">Reveal answer</button>
+                <span id="l5-a1" class="answer">No. GUI should stay an interaction layer only.</span>
+              </div>
+            </li>
+            <li>
+              Can you replace the UI without changing agent logic?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l5-a2">Reveal answer</button>
+                <span id="l5-a2" class="answer">Yes, if backend boundaries are clean.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="lesson-4-skills.html">Back: Lesson 4</a>
+          <a class="lesson-link" href="appendix-a-multiple-skills.html">Next: Appendix A</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

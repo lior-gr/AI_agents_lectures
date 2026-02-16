@@ -1,0 +1,169 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 2 - Agent loop | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a class="active" href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Multiple skills</a>
+    <a href="appendix-b-skill-router.html">Appendix B - Skill router code</a>
+    <a href="appendix-c-bounded-routing.html">Appendix C - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Lesson 2 - Introduce a real minimal agent loop</h2>
+      <p>
+        We now add loop-driven behavior, but we keep strict limits.
+        The goal is controlled autonomy, not open-ended complexity.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">L2</span> Concept before coding</h3>
+        <p>What changes and what stays the same.</p>
+      </div>
+      <div class="card-body">
+        <div class="diagram">Before: User -> CLI -> storage.py -> tasks_db.json
+
+After: User -> agent.py -> tools.py -> storage.py -> tasks_db.json</div>
+        <div class="note">
+          <h4>Guardrails to keep from day one</h4>
+          <ul>
+            <li><code>max_steps</code> hard limit.</li>
+            <li>Tool whitelist only.</li>
+            <li>Low temperature for stable behavior.</li>
+            <li>Token cap per request.</li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Simple loop example</h4>
+          <p>
+            Goal: "Add buy milk and then show tasks."<br>
+            Expected sequence: call <code>add_task</code>, then <code>list_tasks</code>, then stop.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">L2</span> Create agent skeleton</h3>
+        <p>Start with loop and stop conditions first.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l2-prompt-agent">Copy</button>
+            </div>
+            <pre id="l2-prompt-agent" class="code">Create a new file agent.py.
+Implement a minimal agent loop that:
+- Accepts a user goal string
+- Calls OpenAI chat completion API
+- Supports tool calling
+- Has max_steps=5
+- Logs each step
+- Does not exceed 800 tokens per call
+Includes detailed comments explaining:
+- Where the loop is
+- Where tool calls are processed
+- Where stopping conditions are enforced
+Do not implement tools yet.
+Just stub them.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Find loop block and verify step counter increments safely.</li>
+              <li>Verify stop conditions are explicit and deterministic.</li>
+              <li>Confirm API key uses environment variable.</li>
+              <li>Confirm temperature and token caps are intentionally set.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">L2</span> Add tools and wire CLI goal mode</h3>
+        <p>Agent does not edit JSON directly. It only calls tools.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l2-prompt-tools">Copy</button>
+            </div>
+            <pre id="l2-prompt-tools" class="code">Create tools.py.
+Define tool schemas for:
+- add_task(text: str)
+- list_tasks()
+- complete_task(task_id: int)
+These must call existing storage.py functions.
+Do not put business logic inside the agent.
+Add detailed comments explaining separation of concerns.
+
+Modify main.py:
+Add a new command:
+python main.py --goal "Plan my tasks for today"
+This should call:
+agent.run_agent(goal)
+Keep old deterministic commands working.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Run old deterministic CLI commands and confirm no regressions.</li>
+              <li>Run one goal and inspect tool sequence in logs.</li>
+              <li>Confirm storage remains clean and unchanged in role.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="checkpoint">
+          <h4>Checkpoint</h4>
+          <ol class="qa">
+            <li>
+              Who owns the loop now?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l2-a1">Reveal answer</button>
+                <span id="l2-a1" class="answer">The agent in <code>agent.py</code>.</span>
+              </div>
+            </li>
+            <li>
+              Does storage know an agent exists?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l2-a2">Reveal answer</button>
+                <span id="l2-a2" class="answer">No. Storage remains a persistence module only.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="lesson-1-baseline.html">Back: Lesson 1</a>
+          <a class="lesson-link" href="lesson-3-mcp-decoupling.html">Next: Lesson 3</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

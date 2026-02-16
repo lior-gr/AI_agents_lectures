@@ -265,6 +265,11 @@ main.content {
   margin: 10px 0 8px;
 }
 
+.prompt-stack {
+  display: grid;
+  gap: 10px;
+}
+
 .prompt-box,
 .task-box {
   border-radius: var(--radius-md);

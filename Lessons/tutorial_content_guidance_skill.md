@@ -132,6 +132,21 @@ Use it as a quality checklist when writing or revising any lesson.
 - Do not rely on memory of previous edits; re-check against source Markdown before finalizing.
 - Document major gaps found (even briefly) before or during the close-the-gap edits.
 
+## 18) Explanation channel contract in prompts (mandatory)
+
+- When a prompt asks for "explanations", always split explanation targets explicitly:
+  1. **In-file comments** (inside generated code):
+     - non-obvious logic,
+     - function/module responsibility,
+     - edge-case handling and validation intent.
+  2. **Codex chat explanation** (outside files):
+     - architecture decisions and tradeoffs,
+     - what changed and why,
+     - how to test/verify behavior.
+  3. **Both** when needed:
+     - for critical logic where maintainers need code-local context and students need reasoning context.
+- Never leave explanation placement ambiguous; prompt text must name the target channel explicitly.
+
 ## Quick author checklist
 
 - Is naming consistent (`Lesson N`)?
@@ -150,3 +165,4 @@ Use it as a quality checklist when writing or revising any lesson.
 - Are checkpoints aligned with core claims?
 - Was a Markdown-vs-HTML comparison phase completed for this lesson?
 - Was a close-the-gap pass completed to resolve missing/weak source content?
+- Do prompts explicitly separate comment explanations vs chat explanations vs both?

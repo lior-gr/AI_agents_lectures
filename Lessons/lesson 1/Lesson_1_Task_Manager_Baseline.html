@@ -71,7 +71,7 @@ User → CLI → Task Storage → File (JSON)
 <p>&gt; Requirements:  </p>
 <p>&gt; - Must work on Windows first  </p>
 <p>&gt; - Use argparse  </p>
-<p>&gt; - Store tasks in tasks.json  </p>
+<p>&gt; - Store tasks in tasks_db.json  </p>
 <p>&gt; - Create virtual environment instructions  </p>
 <p>&gt; - Add comments explaining each file  </p>
 <p>&gt; Do NOT implement advanced features yet.</p>
@@ -86,7 +86,7 @@ User → CLI → Task Storage → File (JSON)
 task_manager/
  ├── main.py
  ├── storage.py
- ├── tasks.json (auto-created later)
+ ├── tasks_db.json (auto-created later)
  ├── README.md
  └── requirements.txt (likely empty)
 </code></pre></p>
@@ -131,7 +131,7 @@ python main.py --complete 1
 <p><pre><code>
 main.py      → CLI parsing
 storage.py   → Read/Write JSON
-tasks.json   → Data
+tasks_db.json   → Data
 </code></pre></p>
 
 <p>Why?</p>
@@ -232,7 +232,7 @@ CLI (main.py)
   ↓
 Storage (storage.py)
   ↓
-tasks.json
+tasks_db.json
 </code></pre></p>
 
 <p>No decision-making loop exists.</p>

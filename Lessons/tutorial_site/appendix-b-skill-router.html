@@ -1,0 +1,143 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Appendix B - Skill router code | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Multiple skills</a>
+    <a class="active" href="appendix-b-skill-router.html">Appendix B - Skill router code</a>
+    <a href="appendix-c-bounded-routing.html">Appendix C - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Appendix B - Concrete deterministic skill router</h2>
+      <p>
+        This appendix gives a practical, debug-friendly implementation of <code>load_skills(goal)</code>.
+        The focus is clarity, predictability, and easy testing.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">B</span> Concept before coding</h3>
+        <p>Deterministic rules are easier to debug than free-form model choices.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Skill folder baseline</h4>
+          <ul>
+            <li><code>skills/always_on.md</code></li>
+            <li><code>skills/task_planning.md</code></li>
+            <li><code>skills/status_reporting.md</code></li>
+            <li><code>skills/output_format.md</code></li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Simple example</h4>
+          <p>
+            Goal: "Summarize tasks in JSON"<br>
+            Expected selected skills: <code>always_on + status_reporting + output_format</code>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">B</span> Add deterministic <code>load_skills</code> implementation</h3>
+        <p>This changes prompt construction only.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="b-prompt">Copy</button>
+            </div>
+            <pre id="b-prompt" class="code">In agent.py, implement a concrete deterministic load_skills(goal: str) router.
+Requirements:
+- Use skill files: always_on.md, task_planning.md, status_reporting.md, output_format.md
+- Apply ordering:
+  1) always_on
+  2) domain skill(s)
+  3) output_format
+- Use keyword triggers:
+  task_planning: plan/organize/schedule/today/this week
+  status_reporting: status/report/summary/summarize
+  output_format: table/markdown/csv/json/pretty
+- Concatenate selected skill text with separator "\\n\\n---\\n\\n"
+- Do not change agent loop
+- Do not change tool execution</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Test 4-5 goals and verify expected skill combinations.</li>
+              <li>Temporarily print selected skills for manual verification.</li>
+              <li>Remove debug prints after validation.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">B</span> Watch for common mistakes</h3>
+        <p>Small mistakes here create large confusion later.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Avoid these</h4>
+          <ul>
+            <li>Letting model decide skill set in this deterministic appendix.</li>
+            <li>Putting tool call instructions directly inside skill files.</li>
+            <li>Modifying MCP server for skill logic.</li>
+            <li>Changing loop flow while adding skills.</li>
+          </ul>
+        </div>
+        <div class="checkpoint">
+          <h4>Checkpoint</h4>
+          <ol class="qa">
+            <li>
+              Is <code>load_skills</code> deterministic here?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="b-a1">Reveal answer</button>
+                <span id="b-a1" class="answer">Yes. It is keyword-driven with fixed ordering.</span>
+              </div>
+            </li>
+            <li>
+              Should MCP know about skills?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="b-a2">Reveal answer</button>
+                <span id="b-a2" class="answer">No. Skills are prompt logic, MCP is execution boundary.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="appendix-a-multiple-skills.html">Back: Appendix A</a>
+          <a class="lesson-link" href="appendix-c-bounded-routing.html">Next: Appendix C</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,155 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 4 - Skills | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a class="active" href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Multiple skills</a>
+    <a href="appendix-b-skill-router.html">Appendix B - Skill router code</a>
+    <a href="appendix-c-bounded-routing.html">Appendix C - Bounded routing</a>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Lesson 4 - Add Skills for reasoning discipline</h2>
+      <p>
+        Skills improve how the model thinks, not how code executes.
+        This lesson is about clean separation between reasoning and runtime control flow.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">L4</span> Concept before coding</h3>
+        <p>Skills live in prompt space only.</p>
+      </div>
+      <div class="card-body">
+        <div class="diagram">Agent loop -> prompt construction (includes skill text) -> model response -> tool call decision</div>
+        <div class="note">
+          <h4>Skill is NOT:</h4>
+          <ul>
+            <li>Not a loop.</li>
+            <li>Not a subprocess runner.</li>
+            <li>Not a storage layer.</li>
+            <li>Not a tool implementation.</li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Simple example</h4>
+          <p>
+            A planning skill may say "first inspect existing tasks, then plan realistically."
+            It does not execute the inspection itself.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">L4</span> Create a first skill file</h3>
+        <p>Write clear, reusable reasoning rules.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l4-prompt-skill">Copy</button>
+            </div>
+            <pre id="l4-prompt-skill" class="code">Create a new folder called skills.
+Inside it create task_planning_skill.md.
+The file should:
+- Define when this skill should be used
+- Provide structured reasoning rules for task planning
+- Define constraints (no hallucinated tasks)
+- Explain how tasks should be prioritized
+- Not include execution logic
+- Include comments explaining why this is not a tool
+This file is pure text.
+No Python.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Check that the skill text is actionable but tool-agnostic.</li>
+              <li>Check constraints are explicit and practical.</li>
+              <li>Check the file does not contain implementation logic.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">L4</span> Inject skill into prompt construction</h3>
+        <p>Reasoning changes only. Execution plumbing stays untouched.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l4-prompt-inject">Copy</button>
+            </div>
+            <pre id="l4-prompt-inject" class="code">Modify agent.py so that before sending messages to OpenAI,
+it loads task_planning_skill.md and injects it into the system prompt.
+The skill must:
+- Not modify loop logic
+- Not modify tool logic
+- Only affect prompt construction
+Add detailed comments explaining separation.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Diff should show prompt-construction changes only.</li>
+              <li>Loop, tool call path, and MCP components should be unchanged.</li>
+              <li>Run planning goal and compare response quality with/without skill.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="checkpoint">
+          <h4>Checkpoint</h4>
+          <ol class="qa">
+            <li>
+              Does a skill execute tools?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l4-a1">Reveal answer</button>
+                <span id="l4-a1" class="answer">No. Skills influence reasoning, not execution.</span>
+              </div>
+            </li>
+            <li>
+              Should loop control change in this lesson?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l4-a2">Reveal answer</button>
+                <span id="l4-a2" class="answer">No. Only prompt construction should change.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="lesson-3-mcp-decoupling.html">Back: Lesson 3</a>
+          <a class="lesson-link" href="lesson-5-ui-boundary.html">Next: Lesson 5</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+

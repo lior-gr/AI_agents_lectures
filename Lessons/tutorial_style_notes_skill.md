@@ -38,6 +38,10 @@ Keep lesson delivery accurate, engaging, and visually consistent across the full
   - agent vs MCP vs storage vs UI.
 - Write section descriptions as purpose statements (for example "what this section gives the student"),
   not filler map descriptions.
+- In every Codex prompt that requests explanations, explicitly label:
+  - what goes in code comments,
+  - what goes in Codex chat response,
+  - what must be explained in both channels.
 
 ## Content fidelity rules
 

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lesson 1: Baseline System | AI Agent Lab</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Persistent Sidebar -->
+    <nav class="sidebar">
+        <h1 style="font-size: 18px; margin-bottom: 30px;">AI Agent Lab</h1>
+        <h2>Phase 1: Foundations</h2>
+        <a href="index.html">🏠 Dashboard</a>
+        <a href="lesson-0.html">🧠 0. Mental Models</a>
+        <a href="lesson-1.html" class="active">🛠️ 1. Baseline System</a>
+        
+        <h2>Phase 2: The Stack</h2>
+        <a href="lesson-2.html">🤖 2. Agent Loop</a>
+        <a href="lesson-3.html">🔌 3. MCP Decoupling</a>
+        <a href="lesson-4.html">⚡ 4. Skill Injection</a>
+        
+        <h2>Phase 3: Integration</h2>
+        <a href="lesson-5.html">🖥️ 5. UI Boundaries</a>
+    </nav>
+
+    <main>
+        <div class="hero">
+            <span class="tag" style="background: rgba(255,255,255,0.2);">Phase 1</span>
+            <h1>Lesson 1: Building a Baseline System</h1>
+            <p>Before building an agent, we must build a deterministic system that does not require one.</p>
+        </div>
+
+        <!-- 1.1 Goal & Mental Model -->
+        <section class="section-card">
+            <h2>🎯 Goal & Mental Model</h2>
+            <p>If you don’t understand a deterministic baseline, you will not understand what an agent actually adds later.</p>
+            <div style="background: #f0f6ff; padding: 20px; border-radius: 12px; border: 1px solid var(--gh-blue); margin-top: 20px;">
+                <h4 style="margin-top:0">The Concept: Pure Command → Effect</h4>
+                <p>We are building a system with <strong>No Decisions, No Loops, and No Planning.</strong></p>
+                <p><em>Example: User types "Add milk" → System writes to file. Done.</em></p>
+            </div>
+        </section>
+
+        <!-- 1.2 Environment Setup -->
+        <section class="section-card">
+            <h2>🏗️ 1.2 Environment Setup (Windows First)</h2>
+            <p>Open VS Code in an empty folder. We will use Codex to scaffold the project structure.</p>
+            
+            <div class="codex-container">
+                <div class="codex-header">
+                    <span>PROMPT: SCAFFOLD PROJECT</span>
+                    <button class="copy-btn" onclick="copyPrompt('p1')">Copy Prompt</button>
+                </div>
+                <pre id="p1" class="codex-content">Create a minimal cross-platform Python CLI project for a task manager.
+Requirements:
+- Must work on Windows first
+- Use argparse
+- Store tasks in tasks.json
+- Create virtual environment instructions
+- Add comments explaining each file
+Do NOT implement advanced features yet.</pre>
+            </div>
+
+            <div class="checkpoint" style="background: #e6ffec; border-color: #34d058; color: #1a7f37;">
+                <h4 style="margin-top:0">🔍 Inspection Checklist</h4>
+                <ul style="margin-bottom:0">
+                    <li>Did Codex separate CLI from storage?</li>
+                    <li>Did it include Windows PowerShell setup?</li>
+                    <li>Did it avoid premature "AI" features?</li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- 1.4 Architecture -->
+        <section class="section-card">
+            <h2>🧱 1.4 Architecture & Engineering Rules</h2>
+            <p>We are building a <strong>clean boundary system</strong>. Separation now avoids confusion later.</p>
+            <ul>
+                <li><strong>Storage:</strong> Touches JSON directly.</li>
+                <li><strong>Tools:</strong> Call storage.</li>
+                <li><strong>Agent:</strong> Calls tools.</li>
+            </ul>
+            <p><em>Rule: Agent logic must NOT go inside storage. Skills must NOT mutate JSON directly.</em></p>
+        </section>
+
+        <!-- 1.6 Controlled Prompting -->
+        <section class="section-card" style="border-left: 5px solid var(--gh-purple);">
+            <h2>🎮 1.6 Controlled Prompting Technique</h2>
+            <p>Do NOT ask Codex to "Build a complete task manager." Instead, force <strong>iterative growth</strong>.</p>
+            
+            <div class="codex-container">
+                <div class="codex-header"><span>STEP 1: ADD COMMAND</span><button class="copy-btn" onclick="copyPrompt('p2')">Copy</button></div>
+                <pre id="p2" class="codex-content">Implement only the --add command. Include detailed comments. Do not implement listing yet.</pre>
+            </div>
+
+            <div class="codex-container">
+                <div class="codex-header"><span>STEP 2: LIST COMMAND</span><button class="copy-btn" onclick="copyPrompt('p3')">Copy</button></div>
+                <pre id="p3" class="codex-content">Now implement --list. Explain how indexing works.</pre>
+            </div>
+        </section>
+
+        <!-- Checkpoint -->
+        <section class="checkpoint">
+            <h2 style="margin-top:0; color: #725302; border-bottom: 1px solid #d4a72c;">🎯 Lesson 1 Checkpoint</h2>
+            <p>Answer these before moving to Lesson 2:</p>
+            <ol>
+                <li>Does this system contain an agent? (No).</li>
+                <li>Where would an agent sit if added? (Above the CLI/Storage layer).</li>
+                <li>Should storage ever call OpenAI? (No).</li>
+                <li>Is Codex part of the runtime? (No, it is a dev assistant).</li>
+            </ol>
+        </section>
+
+        <footer style="margin-top: 40px; text-align: right;">
+            <a href="lesson-2.html" style="background: var(--gh-green); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 18px;">Proceed to Lesson 2 →</a>
+        </footer>
+    </main>
+
+    <script>
+        function copyPrompt(id) {
+            const text = document.getElementById(id).innerText;
+            navigator.clipboard.writeText(text);
+            alert("🚀 Prompt copied! Paste this into Codex.");
+        }
+    </script>
+</body>
+</html>
