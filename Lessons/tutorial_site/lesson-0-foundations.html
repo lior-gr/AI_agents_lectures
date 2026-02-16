@@ -12,6 +12,18 @@
     <p>Concept first. Then action.</p>
     <a href="index.html">Start here</a>
     <a class="active" href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <div class="sidebar-map">
+      <h2>Lesson 0 map</h2>
+      <a class="sidebar-sub-link" href="#p1-outcomes">P1: What you will learn</a>
+      <a class="sidebar-sub-link" href="#p2-vocabulary">P2: Vocabulary</a>
+      <a class="sidebar-sub-link" href="#p3-stack">P3: Stack and responsibilities</a>
+      <a class="sidebar-sub-link" href="#p4-two-agents">P4: Two kinds of agents</a>
+      <a class="sidebar-sub-link" href="#p5-rules">P5: Interaction rules</a>
+      <a class="sidebar-sub-link" href="#p6-practical">P6: Practical task-planner example</a>
+      <a class="sidebar-sub-link" href="#p7-scope">P7: Scope for this course</a>
+      <a class="sidebar-sub-link" href="#p8-summary">P8: Summary diagram</a>
+      <a class="sidebar-sub-link" href="#p9-checkpoint">P9: Checkpoint</a>
+    </div>
     <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
     <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
     <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
@@ -33,23 +45,32 @@
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">P1</span> What you will learn in this lesson</h3>
-        <p>A short map so you can navigate this lesson comfortably.</p>
+        <h3><span class="marker">MAP</span> Lesson map</h3>
+        <p>Use this as a quick navigation guide before you start reading.</p>
       </div>
       <div class="card-body">
         <div class="note">
-          <h4>Lesson map</h4>
           <ul>
-            <li><a class="lesson-link" href="#p2-vocabulary">P2: Vocabulary.</a></li>
-            <li><a class="lesson-link" href="#p3-stack">P3: Stack and responsibilities.</a></li>
-            <li><a class="lesson-link" href="#p4-two-agents">P4: Two kinds of agents.</a></li>
-            <li><a class="lesson-link" href="#p5-rules">P5: Interaction rules.</a></li>
-            <li><a class="lesson-link" href="#p6-practical">P6: Practical task-planner example.</a></li>
-            <li><a class="lesson-link" href="#p7-scope">P7: Scope for this course.</a></li>
-            <li><a class="lesson-link" href="#p8-summary">P8: Summary diagram.</a></li>
-            <li><a class="lesson-link" href="#p9-checkpoint">P9: Checkpoint.</a></li>
+            <li><a class="map-link" href="#p1-outcomes">P1: What you will learn in this lesson.</a></li>
+            <li><a class="map-link" href="#p2-vocabulary">P2: Vocabulary.</a></li>
+            <li><a class="map-link" href="#p3-stack">P3: Stack and responsibilities.</a></li>
+            <li><a class="map-link" href="#p4-two-agents">P4: Two kinds of agents.</a></li>
+            <li><a class="map-link" href="#p5-rules">P5: Interaction rules.</a></li>
+            <li><a class="map-link" href="#p6-practical">P6: Practical task-planner example.</a></li>
+            <li><a class="map-link" href="#p7-scope">P7: Scope for this course.</a></li>
+            <li><a class="map-link" href="#p8-summary">P8: Summary diagram.</a></li>
+            <li><a class="map-link" href="#p9-checkpoint">P9: Checkpoint.</a></li>
           </ul>
         </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p1-outcomes"><span class="marker">P1</span> What you will learn in this lesson</h3>
+        <p>These are the outcomes to keep in mind while you go through the page.</p>
+      </div>
+      <div class="card-body">
         <div class="note">
           <h4>By the end of this page, you should be clear on:</h4>
           <ul>
@@ -213,7 +234,7 @@ tools affect -> system state</div>
           <ul>
             <li>MCP server planning goals.</li>
             <li>Skills running subprocesses.</li>
-            <li>Agent editing source code directly as a development actor.</li>
+            <li>Runtime planner agent rewriting project source files (for example <code>agent.py</code> or <code>main.py</code>).</li>
             <li>Codex directly serving end-user runtime requests.</li>
           </ul>
         </div>

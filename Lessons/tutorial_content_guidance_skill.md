@@ -105,6 +105,8 @@ Use it as a quality checklist when writing or revising any lesson.
 - If a roadmap card is present, make it actionable:
   - add anchors/links to target sections.
 - Keep the roadmap concise and aligned with section markers/headings.
+- Place the roadmap before the learning-outcomes section so students get orientation first.
+- Include the learning-outcomes section itself in the roadmap (for example `P1`), not only later sections.
 
 ## 15) Scope-closure rule
 
@@ -121,11 +123,21 @@ Use it as a quality checklist when writing or revising any lesson.
   - "development session"
 - Delay advanced system-design vocabulary until the student has enough context.
 
+## 17) Source-to-HTML gap-closure workflow (mandatory)
+
+- Treat the lesson Markdown under `Lessons/md_only` as the source of truth for factual lesson content.
+- For each lesson page, run two explicit phases:
+  1. **Comparison phase:** compare `lesson-N` Markdown content to the current HTML page and identify missing concepts, constraints, examples, and learning tasks.
+  2. **Close-the-gap phase:** revise HTML to add missing content and tighten weak/partial explanations until core lesson intent matches the Markdown source.
+- Do not rely on memory of previous edits; re-check against source Markdown before finalizing.
+- Document major gaps found (even briefly) before or during the close-the-gap edits.
+
 ## Quick author checklist
 
 - Is naming consistent (`Lesson N`)?
 - Is there a real map if map is promised?
 - Is roadmap clickable/useful (if shown)?
+- Is roadmap placed before outcomes and does it include outcomes (`P1`)?
 - Are concepts explained before prompts?
 - Are terms beginner-safe?
 - Are examples generic-first then scenario-specific?
@@ -136,3 +148,5 @@ Use it as a quality checklist when writing or revising any lesson.
 - Is there a clear scope-closure sentence?
 - Is summary separated from scope?
 - Are checkpoints aligned with core claims?
+- Was a Markdown-vs-HTML comparison phase completed for this lesson?
+- Was a close-the-gap pass completed to resolve missing/weak source content?

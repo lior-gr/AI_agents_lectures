@@ -93,6 +93,35 @@ body.page-layout {
   background: rgba(11, 99, 246, 0.45);
 }
 
+.sidebar-map {
+  margin: 10px 0 12px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.sidebar-map h2 {
+  margin: 0 0 8px;
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #b9d3ff;
+}
+
+.sidebar a.sidebar-sub-link {
+  margin: 2px 0;
+  padding: 4px 8px;
+  font-size: 0.79rem;
+  color: #d6e5ff;
+  border-radius: 6px;
+}
+
+.sidebar a.sidebar-sub-link:hover {
+  border-color: transparent;
+  background: rgba(255, 255, 255, 0.1);
+}
+
 main.content {
   width: min(1050px, 100%);
   padding: 24px 24px 42px 0;
@@ -394,6 +423,22 @@ pre.code {
 .lesson-link:hover {
   border-color: #9eb8d8;
   background: #f8fbff;
+}
+
+.map-link {
+  color: #123063;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  font-size: 0.84rem;
+  display: inline;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+.map-link:hover {
+  color: #0b63f6;
 }
 
 .cards-grid {

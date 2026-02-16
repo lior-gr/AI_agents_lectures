@@ -21,6 +21,10 @@ Keep lesson delivery accurate, engaging, and visually consistent across the full
 - Keep prompt blocks visually distinct from student-task blocks.
 - Keep all lessons on the same component system (cards, spacing, border radius, typography).
 - Preserve mobile readability; do not rely on desktop-only layout assumptions.
+- Use one shared top-of-lesson structure:
+  - `Lesson map` card first
+  - `What you will learn` card second
+  - map includes link to the outcomes section itself (`P1`) plus subsequent sections.
 
 ## Clarity rules
 
@@ -32,6 +36,8 @@ Keep lesson delivery accurate, engaging, and visually consistent across the full
 - Keep architecture boundaries explicit in wording:
   - reasoning vs execution
   - agent vs MCP vs storage vs UI.
+- Write section descriptions as purpose statements (for example "what this section gives the student"),
+  not filler map descriptions.
 
 ## Content fidelity rules
 
