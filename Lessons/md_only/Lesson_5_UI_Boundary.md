@@ -1,9 +1,9 @@
-# 🧠 Tutorial: Codex, Agents, MCP & Skills  
-# Lesson 5 — Adding a UI Without Breaking Architecture
+﻿# ðŸ§  Tutorial: Codex, Agents, MCP & Skills  
+# Lesson 5 â€” Adding a UI Without Breaking Architecture
 
 ---
 
-## 🎯 Goal of This Lesson
+## ðŸŽ¯ Goal of This Lesson
 
 So far we have:
 
@@ -45,15 +45,15 @@ Nothing more.
 
 ```
 User
-  ↓
+  â†“
 GUI (ui.py)
-  ↓
+  â†“
 Application Layer (main.py)
-  ↓
+  â†“
 Agent
-  ↓
+  â†“
 MCP
-  ↓
+  â†“
 Storage
 ```
 
@@ -63,25 +63,20 @@ It does not know how anything works internally.
 
 ---
 
-## 5.3 Choosing the GUI Toolkit
+## 5.3 Qt6 Background (Short)
 
-Windows-first constraint.
-
-Options:
-
-- Tkinter (built-in, simple)
-- PySide6 / Qt6 (more professional, slightly heavier)
-
-For learning clarity, start with Tkinter.
-You may upgrade to Qt later.
+- Qt6 is a mature cross-platform desktop UI framework.
+- PySide6 is the official Python binding for Qt6.
+- It uses an event-driven model (signals/slots), which fits app-style interfaces well.
+- It is heavier than Tkinter, but scales better for richer UIs.
 
 ---
 
-## 5.4 Task 1 — Create Minimal UI
+## 5.4 Task 1 â€” Create Minimal UI
 
 Ask Codex:
 
-> Create ui.py.
+> Create ui.py using PySide6 (Qt6).
 > Requirements:
 > - Simple window with:
 >     - Text input field
@@ -92,6 +87,12 @@ Ask Codex:
 > - Do NOT import OpenAI here.
 > - Do NOT implement agent logic here.
 > - Add comments explaining separation of concerns.
+
+Student task after generation (behavior only):
+
+1. Run `python main.py --gui` and confirm the window opens correctly.
+2. Enter a sample goal, click Submit, and confirm output appears in the UI.
+3. Submit twice with different goals and confirm the UI remains responsive and updates output each time.
 
 ---
 
@@ -117,7 +118,7 @@ The following files should remain untouched logically:
 - storage.py
 - skills/
 
-If adding UI required modifying those — architecture leaked.
+If adding UI required modifying those â€” architecture leaked.
 
 ---
 
@@ -134,7 +135,7 @@ If adding UI required modifying those — architecture leaked.
 
 Both paths must go through the same agent.
 
-If they don’t — refactor.
+If they donâ€™t â€” refactor.
 
 ---
 
@@ -148,24 +149,24 @@ Most AI systems fail architecturally because:
 
 We are proving:
 
-You can change surface (CLI → GUI)
+You can change surface (CLI â†’ GUI)
 Without touching core intelligence.
 
 That is professional layering.
 
 ---
 
-## 5.9 Optional Extension — Qt6 Upgrade
+## 5.9 Optional Extension - Qt6 Enhancements
 
 If you want more realism:
 
 Ask Codex:
 
-> Replace Tkinter UI with PySide6 version.
+> Keep PySide6 (Qt6) and add small UX improvements (layout polish, clearer status text, keyboard submit).
 > Keep identical backend interface.
 > Do not modify agent, MCP, or storage.
 
-If backend changes were required — design is flawed.
+If backend changes were required â€” design is flawed.
 
 ---
 
@@ -183,7 +184,7 @@ Each layer has one responsibility.
 
 ---
 
-## 🎯 Lesson 5 Checkpoint
+## ðŸŽ¯ Lesson 5 Checkpoint
 
 Answer:
 
@@ -197,7 +198,7 @@ If answers are clear, you understand clean layering.
 
 ---
 
-## 🔜 Next Phase Preview
+## ðŸ”œ Next Phase Preview
 
 Next, we will:
 
@@ -208,3 +209,4 @@ Next, we will:
 - Provide roadmap for maturing this into a real product
 
 You now understand the architecture.
+

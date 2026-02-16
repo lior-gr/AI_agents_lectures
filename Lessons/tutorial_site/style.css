@@ -41,6 +41,13 @@ body {
     linear-gradient(180deg, var(--bg-1), var(--bg-2));
 }
 
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+}
+
 body.page-layout {
   display: grid;
   grid-template-columns: 290px 1fr;
@@ -213,16 +220,28 @@ main.content {
   color: #123063;
 }
 
+.note h5 {
+  margin: 10px 0 8px;
+  font-size: 0.86rem;
+  color: #123063;
+}
+
 .note p,
-.note ul {
+.note ul,
+.note ol {
   margin: 0;
   color: #2f496a;
   line-height: 1.65;
   font-size: 0.86rem;
 }
 
-.note ul {
+.note ul,
+.note ol {
   padding-left: 18px;
+}
+
+.note li + li {
+  margin-top: 4px;
 }
 
 .grid-table {

@@ -269,9 +269,17 @@ OpenAI API key concept and shell setup:
 Concept:
 
 - `OPENAI_API_KEY` is a secret credential used by your runtime app to authenticate with OpenAI.
-- Generate it in the OpenAI dashboard (API keys page), then copy/store it securely because it is shown only once.
 - API usage has real cost; set billing budgets/limits and usage alerts before running repeated tests.
 - Never hardcode it in source files, never commit it to git, and load it from environment variables at runtime.
+
+How to create an OpenAI API key:
+
+1. Sign in to `platform.openai.com` with your account.
+2. Open the dashboard, then go to the API keys page.
+3. Select your project (or create one), then click create new secret key.
+4. Give the key a clear name, create it, and copy it immediately (it is shown once).
+5. Store the key in a secure password manager, then set it in your shell as `OPENAI_API_KEY`.
+6. Set usage limits and alerts in billing settings to control spend.
 
 | Shell | Command |
 | --- | --- |

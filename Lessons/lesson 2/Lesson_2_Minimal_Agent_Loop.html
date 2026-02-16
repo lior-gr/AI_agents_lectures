@@ -1,338 +1,588 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-<meta charset="utf-8"/>
-<title>Lesson 2 — Minimal Agent Loop</title>
-<style>
-body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 40px; line-height: 1.5; }
-pre { background: #f3f3f3; padding: 12px; overflow-x: auto; }
-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-hr { margin: 24px 0; }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 2 - Agent loop | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
 </head>
-<body>
-<p><h1>🧠 Tutorial: Codex, Agents, MCP &amp; Skills  </h1></p>
-<p><h1>Lesson 2 — Introducing a Real Minimal Agent Loop</h1></p>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a class="active" href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <div class="sidebar-map">
+      <h2>Lesson 2 map</h2>
+      <a class="sidebar-sub-link" href="#p1-outcomes">P1: What you will learn</a>
+      <a class="sidebar-sub-link" href="#p2-what-changes">P2: What we are adding</a>
+      <a class="sidebar-sub-link" href="#p3-tool-schema">P3: Tool schema concept</a>
+      <a class="sidebar-sub-link" href="#p4-schema-stubs">P4: Create schema and stubs</a>
+      <a class="sidebar-sub-link" href="#p5-implement-tools">P5: Implement the tools</a>
+      <a class="sidebar-sub-link" href="#p6-agent-steps">P6: Build agent in 4 steps</a>
+      <a class="sidebar-sub-link" href="#p7-wire-cli">P7: Wire CLI and verify</a>
+      <a class="sidebar-sub-link" href="#p8-next">P8: Checkpoint and next</a>
+    </div>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Multiple skills</a>
+    <a href="appendix-b-skill-router.html">Appendix B - Skill router code</a>
+    <a href="appendix-c-bounded-routing.html">Appendix C - Bounded routing</a>
+  </aside>
 
-<p><hr/></p>
+  <main class="content">
+    <header class="hero">
+      <h2>Lesson 2 - Introduce a real minimal agent loop</h2>
+      <p>
+        We now wrap the deterministic baseline with a bounded agent loop. This lesson is staged to keep it digestible:
+        contract first, behavior second, integration third.
+      </p>
+    </header>
 
-<p><h2>🎯 Goal of This Lesson</h2></p>
+    <section class="card">
+      <div class="card-head">
+        <h3><span class="marker">MAP</span> Lesson map</h3>
+        <p>Use this map first, then go section by section.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li><a class="map-link" href="#p1-outcomes">P1: What you will learn.</a></li>
+            <li><a class="map-link" href="#p2-what-changes">P2: What we are adding.</a></li>
+            <li><a class="map-link" href="#p3-tool-schema">P3: Tool schema concept.</a></li>
+            <li><a class="map-link" href="#p4-schema-stubs">P4: Create schema and stubs.</a></li>
+            <li><a class="map-link" href="#p5-implement-tools">P5: Implement the tools.</a></li>
+            <li><a class="map-link" href="#p6-agent-steps">P6: Build agent in 4 steps.</a></li>
+            <li><a class="map-link" href="#p7-wire-cli">P7: Wire CLI and verify.</a></li>
+            <li><a class="map-link" href="#p8-next">P8: Checkpoint and next.</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
 
-<p>We now transform the deterministic CLI system into something that contains:</p>
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p1-outcomes"><span class="marker">P1</span> What you will learn in this lesson</h3>
+        <p>These outcomes define what "done" means for a minimal agent loop.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>By the end of this page, you should be clear on:</h4>
+          <ul>
+            <li>Why schema should be defined before implementation.</li>
+            <li>How to keep schema in <code>tools.py</code>.</li>
+            <li>How to build <code>agent.py</code> incrementally: loop, logging, tools, OpenAI call.</li>
+            <li>How to keep boundaries clean: agent controls flow, tools handle execution, storage handles data.</li>
+            <li>How to verify each stage with explicit expected outputs.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
 
-<ul>
-<li>A real agent loop</li>
-<li>OpenAI API integration</li>
-<li>Controlled iteration</li>
-<li>Cost awareness</li>
-<li>Strict guardrails</li>
-</ul>
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p2-what-changes"><span class="marker">P2</span> What we are adding</h3>
+        <p>We add a layer. We do not replace the baseline.</p>
+      </div>
+      <div class="card-body">
+        <div class="diagram">Current system:
+User -> CLI -> storage.py -> tasks_db.json
 
-<p>We will not break the baseline system.</p>
-
-<p>We will wrap it.</p>
-
-<p><hr/></p>
-
-<p><h2>2.1 What We Are Adding</h2></p>
-
-<p>Current system:</p>
-
-<p><pre><code>
-User → CLI → Storage → JSON
-</code></pre></p>
-
-<p>New system:</p>
-
-<p><pre><code>
+New system:
 User
-  ↓
-Agent Loop
-  ↓
-Tool Call (local function)
-  ↓
-Storage → JSON
-</code></pre></p>
-
-<p>Important:</p>
-
-<p>The agent does NOT replace storage.  </p>
-<p>It sits above it.</p>
-
-<p><hr/></p>
-
-<p><h2>2.2 What Is an Agent in This Context?</h2></p>
-
-<p>Minimal definition for this lesson:</p>
-
-<p>An agent is:</p>
-
-<p>1. A loop</p>
-<p>2. With a goal</p>
-<p>3. That can call tools</p>
-<p>4. That decides when to stop</p>
-
-<p>We will implement:</p>
-
-<ul>
-<li>Max 5 steps</li>
-<li>No recursive self-prompting</li>
-<li>Deterministic tool whitelist</li>
-<li>Strict token budget awareness</li>
-</ul>
-
-<p><hr/></p>
-
-<p><h2>2.3 Budget Awareness</h2></p>
-
-<p>You allowed up to $10 total.</p>
-
-<p>We will:</p>
-<ul>
-<li>Use a small model</li>
-<li>Limit max tokens</li>
-<li>Log usage</li>
-<li>Avoid multi-turn reasoning explosions</li>
-</ul>
-
-<p>Expected cost for this lesson:</p>
-<p>Well under $1.</p>
-
-<p><hr/></p>
-
-<p><h2>2.4 New Architecture Diagram</h2></p>
-
-<p><pre><code>
-main.py
-   ↓
-agent.py
-   ↓
-tools.py
-   ↓
+  ->
+agent.py (loop)
+  ->
+tools.py (execution)
+  ->
 storage.py
-   ↓
-tasks_db.json
-</code></pre></p>
+  ->
+tasks_db.json</div>
+        <div class="example">
+          <h4>Simple interaction</h4>
+          <p>
+            Goal: <code>Add buy milk and then show me all tasks</code>.<br>
+            Expected flow: <code>add_task</code> -> <code>list_tasks</code> -> stop.
+          </p>
+        </div>
+      </div>
+    </section>
 
-<p>Clear layering.</p>
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p3-tool-schema"><span class="marker">P3</span> Tool schema concept</h3>
+        <p>Understand the contract before writing behavior.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Definition</h4>
+          <p><code>schema = interface contract, implementation = behavior</code></p>
+        </div>
+        <div class="note">
+          <h4>What this means here</h4>
+          <ul>
+            <li><strong>Schema:</strong> names, descriptions, and argument shapes the model can call.</li>
+            <li><strong>Implementation:</strong> the real Python functions that execute actions.</li>
+            <li>You can define schema first, even when implementation is still stubbed.</li>
+          </ul>
+        </div>
+        <div class="diagram">tools.py
+  TOOL_SCHEMAS  # contract
+  execute_tool(...)  # behavior (stub first, real later)
 
-<p>No shortcuts.</p>
-
-<p><hr/></p>
-
-<p><h2>2.5 Task 1 — Ask Codex to Create Agent Skeleton</h2></p>
-
-<p>Open your project.</p>
-
-<p>Ask Codex:</p>
-
-<p>&gt; Create a new file agent.py.  </p>
-<p>&gt; Implement a minimal agent loop that:  </p>
-<p>&gt; - Accepts a user goal string  </p>
-<p>&gt; - Calls OpenAI chat completion API  </p>
-<p>&gt; - Supports tool calling  </p>
-<p>&gt; - Has max_steps=5  </p>
-<p>&gt; - Logs each step  </p>
-<p>&gt; - Does not exceed 800 tokens per call  </p>
-<p>&gt; - Includes detailed comments explaining:  </p>
-<p>&gt;     - Where the loop is  </p>
-<p>&gt;     - Where tool calls are processed  </p>
-<p>&gt;     - Where stopping conditions are enforced  </p>
-<p>&gt; Do not implement tools yet.  </p>
-<p>&gt; Just stub them.</p>
-
-<p><hr/></p>
-
-<p><h2>Expected Output</h2></p>
-
-<p>Codex should create:</p>
-
-<p><pre><code>
 agent.py
-</code></pre></p>
+  uses contract and behavior in separate implementation steps</div>
+        <div class="note">
+          <h4>Schema explainer and usage examples</h4>
+          <ul>
+            <li>Schema lives in <code>tools.py</code>.</li>
+            <li>Schema declares tool names and argument shapes; it does not execute behavior.</li>
+            <li>Execution behavior will be stubbed first, then implemented later without changing the contract.</li>
+          </ul>
+          <pre class="code"># tools.py (contract)
+TOOL_SCHEMAS = [
+  {
+    "type": "function",
+    "function": {
+      "name": "delete_tasks",
+      "description": "Delete one or more tasks by IDs.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "task_ids": {"type": "array", "items": {"type": "integer"}}
+        },
+        "required": ["task_ids"]
+      }
+    }
+  }
+]</pre>
+        </div>
+      </div>
+    </section>
 
-<p>Containing:</p>
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p4-schema-stubs"><span class="marker">P4</span> Create schema and stubs</h3>
+        <p>First deliverable: contracts + placeholders.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l2-prompt-schema-stubs">Copy</button>
+            </div>
+            <pre id="l2-prompt-schema-stubs" class="code">Create tools.py.
+Define TOOL_SCHEMAS for:
+- add_task(text: str)
+- list_tasks()
+- complete_task(task_id: int)
+- delete_tasks(task_ids: list[int])  # one or more IDs, matches CLI: --delete [task_id ...]
 
-<ul>
-<li>A function like `run_agent(goal: str)`</li>
-<li>A loop</li>
-<li>A message history list</li>
-<li>Tool call detection logic</li>
-<li>Stop condition</li>
-</ul>
+Create stub execution functions only (not implemented yet).
+Do not call storage.py yet.
 
-<p><hr/></p>
+Add comments that explicitly teach:
+schema = interface contract, implementation = behavior.
 
-<p><h2>2.6 What You Must Inspect Carefully</h2></p>
+Explanation placement:
+- In code comments: explain non-obvious logic and boundaries.
+- In Codex chat response: summarize what changed and how to verify.
+- In both: explain why schema and behavior stay separated.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title">
+              <span>Student task after generation</span>
+            </div>
+            <ul class="task-list">
+              <li>Confirm <code>TOOL_SCHEMAS</code> exists in <code>tools.py</code>.</li>
+              <li>Confirm schema includes all 4 tools, including delete with list-of-IDs.</li>
+              <li>Confirm execution functions are stubs and do not call storage yet.</li>
+              <li>Confirm the definition phrase is present and clear.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="note">
+          <h4>Expected output after this stage</h4>
+          <ul>
+            <li><code>tools.py</code> exists.</li>
+            <li><code>TOOL_SCHEMAS</code> exists near the top of the file.</li>
+            <li>Stub execution layer exists for all listed tools.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
 
-<p>Look for:</p>
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p5-implement-tools"><span class="marker">P5</span> Implement the tools</h3>
+        <p>Second deliverable: behavior behind the existing contract.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l2-prompt-tools-impl">Copy</button>
+            </div>
+            <pre id="l2-prompt-tools-impl" class="code">Update tools.py.
+Keep TOOL_SCHEMAS unchanged.
+Replace stub execution functions with real storage.py calls for:
+- add_task
+- list_tasks
+- complete_task
+- delete_tasks (one or more IDs)
 
-<p>1. Where is the loop?</p>
-<p>2. Where are steps counted?</p>
-<p>3. Where does it stop?</p>
-<p>4. Is the OpenAI key read from environment variable?</p>
-<p>5. Is temperature low?</p>
-<p>6. Are tool schemas defined?</p>
+Do not move schema into agent.py.
+Do not put business logic inside agent.py.
 
-<p>If any of these are sloppy — fix them.</p>
+Explanation placement:
+- In code comments: explain each tool function responsibility.
+- In Codex chat response: summarize behavior changes and verification commands.
+- In both: explain why execution belongs in tools/storage, not agent.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title">
+              <span>Student task after generation</span>
+            </div>
+            <ul class="task-list">
+              <li>Confirm tools now call <code>storage.py</code>.</li>
+              <li>Confirm schema remained unchanged and still in <code>tools.py</code>.</li>
+              <li>Run deterministic commands and verify behavior, including multi-ID delete.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="note">
+          <h4>Expected output after this stage</h4>
+          <ul>
+            <li><code>tools.py</code> has both contract and real behavior.</li>
+            <li>Delete path accepts one or more IDs.</li>
+            <li>No JSON-edit logic was added in tools/storage implementation.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
 
-<p><hr/></p>
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p6-agent-steps"><span class="marker">P6</span> Build agent in 4 steps</h3>
+        <p>Start with loop skeleton, then progressively activate features.</p>
+      </div>
+      <div class="card-body">
+        <div class="prompt-stack">
+          <div class="grid-2">
+            <article class="prompt-box">
+              <div class="box-title">
+                <span>Step 1 prompt</span>
+                <button class="copy-btn" data-copy-target="l2-prompt-agent-loop">Copy</button>
+              </div>
+              <pre id="l2-prompt-agent-loop" class="code">Create agent.py with a minimal loop skeleton:
+- run_agent(goal: str)
+- max_steps=5
+- message history list
+- stop conditions
 
-<p><h2>2.7 Add Tool Layer (Local Only)</h2></p>
+Use a model-call stub for now (no OpenAI call yet).
+Import TOOL_SCHEMAS from tools.py, but keep tool execution stubbed in this step.
 
-<p>Now ask Codex:</p>
+Explanation placement:
+- In code comments: explain loop purpose and stop conditions.
+- In Codex chat response: summarize loop flow and stop behavior.
+- In both: explain why model and tools remain stubbed in Step 1.</pre>
+            </article>
+            <article class="task-box">
+              <div class="box-title">
+                <span>Student task for Step 1</span>
+              </div>
+              <ul class="task-list">
+                <li>Confirm only loop skeleton primitives were added.</li>
+                <li>Confirm model and tools are still stubs.</li>
+                <li>Explain why agent owns stop conditions and step limit.</li>
+              </ul>
+              <p>Run to verify:</p>
+              <pre class="code">python -c "from pathlib import Path; s=Path('agent.py').read_text(encoding='utf-8'); print('run_agent' in s and 'max_steps' in s and 'stop' in s)"</pre>
+            </article>
+          </div>
+          <div class="note">
+            <h4>Expected output after Step 1</h4>
+            <ul>
+              <li><code>agent.py</code> exists with loop skeleton.</li>
+              <li>Model interaction is still a stub.</li>
+              <li>Stop conditions are explicit.</li>
+            </ul>
+          </div>
 
-<p>&gt; Create tools.py.  </p>
-<p>&gt; Define tool schemas for:  </p>
-<p>&gt; - add_task(text: str)  </p>
-<p>&gt; - list_tasks()  </p>
-<p>&gt; - complete_task(task_id: int)  </p>
-<p>&gt; These must call existing storage.py functions.  </p>
-<p>&gt; Do not put business logic inside the agent.  </p>
-<p>&gt; Add detailed comments explaining separation of concerns.</p>
+          <div class="grid-2">
+            <article class="prompt-box">
+              <div class="box-title">
+                <span>Step 2 prompt</span>
+                <button class="copy-btn" data-copy-target="l2-prompt-agent-logging">Copy</button>
+              </div>
+              <pre id="l2-prompt-agent-logging" class="code">Update agent.py logging.
+Logging requirements:
+- Use Python logging module (not print)
+- Configure format: "%(asctime)s [%(levelname)s] %(message)s"
+- Log events: agent_start, step_start, tool_called, tool_result, stop, error
+- Include step=<n>/<max_steps> when relevant
+- Include stop reason in stop logs
+- Do not log secrets
 
-<p>Important principle:</p>
+Explanation placement:
+- In code comments: explain what each log event represents.
+- In Codex chat response: summarize log format and where events appear.
+- In both: explain why logging is added before live model calls.</pre>
+            </article>
+            <article class="task-box">
+              <div class="box-title">
+                <span>Student task for Step 2</span>
+              </div>
+              <ul class="task-list">
+                <li>Confirm logging uses the required format.</li>
+                <li>Confirm required event names appear in code path.</li>
+                <li>Confirm no secrets are logged.</li>
+              </ul>
+              <p>Run to verify:</p>
+              <pre class="code">python -c "from pathlib import Path; s=Path('agent.py').read_text(encoding='utf-8'); print('%(asctime)s [%(levelname)s] %(message)s' in s and 'agent_start' in s and 'tool_called' in s and 'stop' in s)"</pre>
+            </article>
+          </div>
+          <div class="note">
+            <h4>Expected output after Step 2</h4>
+            <ul>
+              <li>Logging contract is implemented.</li>
+              <li>Step and stop reason fields appear where relevant.</li>
+            </ul>
+          </div>
 
-<p>The agent never edits JSON.</p>
+          <div class="grid-2">
+            <article class="prompt-box">
+              <div class="box-title">
+                <span>Step 3 prompt</span>
+                <button class="copy-btn" data-copy-target="l2-prompt-agent-tools">Copy</button>
+              </div>
+              <pre id="l2-prompt-agent-tools" class="code">Update agent.py.
+Replace tool-execution stub with real calls to tools.py execution layer.
+Keep model interaction stubbed for now.
+Do not change loop structure or stop conditions.
 
-<p>It only calls tools.</p>
+Explanation placement:
+- In code comments: explain tool dispatch path.
+- In Codex chat response: summarize which files changed and why.
+- In both: explain why loop control must remain unchanged.</pre>
+            </article>
+            <article class="task-box">
+              <div class="box-title">
+                <span>Student task for Step 3</span>
+              </div>
+              <ul class="task-list">
+                <li>Confirm tool execution now routes via <code>tools.py</code>.</li>
+                <li>Confirm model call remains stubbed.</li>
+                <li>Confirm no loop/stop-condition logic changed.</li>
+              </ul>
+              <p>Run to verify:</p>
+              <pre class="code">python -c "from pathlib import Path; s=Path('agent.py').read_text(encoding='utf-8'); print('TOOL_SCHEMAS' in s and ('from tools import' in s or 'import tools' in s) and 'tool_result' in s)"</pre>
+            </article>
+          </div>
+          <div class="note">
+            <h4>Expected output after Step 3</h4>
+            <ul>
+              <li>Tool calls execute through <code>tools.py</code>.</li>
+              <li>Model call is still stubbed.</li>
+              <li>Loop logic remains unchanged.</li>
+            </ul>
+          </div>
 
-<p><hr/></p>
+          <div class="grid-2">
+            <article class="prompt-box">
+              <div class="box-title">
+                <span>Step 4 prompt</span>
+                <button class="copy-btn" data-copy-target="l2-prompt-agent-openai">Copy</button>
+              </div>
+              <pre id="l2-prompt-agent-openai" class="code">Update agent.py.
+Replace the model-call stub with real OpenAI Chat Completions integration.
+Requirements:
+- API key from environment variable
+- low temperature
+- max token cap (<= 800) using model-compatible parameter:
+  - use max_completion_tokens for reasoning models
+  - use max_tokens for models that require it
+- pass tools=TOOL_SCHEMAS
+- keep existing loop, logging, and tool execution flow unchanged
 
-<p><h2>2.8 Connect Agent to CLI</h2></p>
+Explanation placement:
+- In code comments: explain API-key loading and token-parameter choice.
+- In Codex chat response: summarize model-call settings and error handling.
+- In both: explain why this step changes only model interaction.</pre>
+            </article>
+            <article class="task-box">
+              <div class="box-title">
+                <span>Student task for Step 4</span>
+              </div>
+              <p>Set your API key for the current shell:</p>
+              <pre class="code">$env:OPENAI_API_KEY = "your_key_here"</pre>
+              <ul class="task-list">
+                <li>Confirm <code>agent.py</code> reads the key from environment variable only.</li>
+                <li>Do not run end-to-end goal yet; first full run happens in P7 after CLI wiring.</li>
+                <li>Confirm loop and tool execution flow remained unchanged.</li>
+              </ul>
+              <p>Run to verify:</p>
+              <pre class="code">python -c "import os; print('OPENAI_API_KEY set:', bool(os.getenv('OPENAI_API_KEY')))"</pre>
+            </article>
+          </div>
+          <div class="note" id="step4-api-key">
+            <h4>OpenAI API key concept and shell setup</h4>
+            <ul>
+              <li><code>OPENAI_API_KEY</code> is a secret credential used by your runtime app to authenticate API calls.</li>
+              <li>API usage has real cost; set billing budgets/limits and usage alerts before running repeated tests.</li>
+              <li>Never hardcode it in source files, never commit it to git, and load it from environment variables at runtime.</li>
+            </ul>
+            <h5>How to create an OpenAI API key</h5>
+            <ol>
+              <li>Sign in to <code>platform.openai.com</code> with your account.</li>
+              <li>Open the dashboard, then go to the API keys page.</li>
+              <li>Select your project (or create one), then click create new secret key.</li>
+              <li>Give the key a clear name, create it, and copy it immediately (it is shown once).</li>
+              <li>Store the key in a secure password manager, then set it in your shell as <code>OPENAI_API_KEY</code>.</li>
+              <li>Set usage limits and alerts in billing settings to control spend.</li>
+            </ol>
+            <table class="grid-table">
+              <thead>
+                <tr>
+                  <th>Shell</th>
+                  <th>Command</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>PowerShell</td>
+                  <td><code>$env:OPENAI_API_KEY = "your_key_here"</code></td>
+                </tr>
+                <tr>
+                  <td>Unix bash</td>
+                  <td><code>export OPENAI_API_KEY="your_key_here"</code></td>
+                </tr>
+                <tr>
+                  <td>Unix tcsh</td>
+                  <td><code>setenv OPENAI_API_KEY "your_key_here"</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note">
+            <h4>Expected output after Step 4</h4>
+            <ul>
+              <li>OpenAI interaction is live.</li>
+              <li>Loop + logger + tools continue to work unchanged.</li>
+              <li>Agent is now operational with bounded behavior.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
 
-<p>Modify `main.py`:</p>
-
-<p>Add a new command:</p>
-
-<p><pre><code>
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p7-wire-cli"><span class="marker">P7</span> Wire CLI goal mode and verify compatibility</h3>
+        <p>Final integration should add, not replace.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l2-prompt-main-goal">Copy</button>
+            </div>
+            <pre id="l2-prompt-main-goal" class="code">Modify main.py:
+Add goal mode:
 python main.py --goal "Plan my tasks for today"
-</code></pre></p>
 
-<p>Instead of calling storage directly, this should:</p>
-
-<p><pre><code>
+Route this path to:
 agent.run_agent(goal)
-</code></pre></p>
 
-<p>But:</p>
+Keep old deterministic commands working unchanged.
 
-<p>Keep old deterministic commands working.</p>
+Explanation placement:
+- In code comments: explain shared backend entry points between deterministic CLI and goal path.
+- In Codex chat response: summarize compatibility checks and regression verification.
+- In both: explain why this adds a layer instead of replacing deterministic commands.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title">
+              <span>Student task after generation</span>
+            </div>
+            <ul class="task-list">
+              <li>Run deterministic commands and confirm no regressions.</li>
+              <li>Run goal mode and confirm agent flow appears in logs.</li>
+              <li>Confirm storage remains model-agnostic.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="note">
+          <h4>Expected output after this stage</h4>
+          <ul>
+            <li><code>--goal</code> path is active and routed to agent.</li>
+            <li>Legacy deterministic paths remain valid.</li>
+            <li>No boundary leakage between agent, tools, and storage.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
 
-<p>We are adding a layer, not replacing it.</p>
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p8-next"><span class="marker">P8</span> Checkpoint and next lesson</h3>
+        <p>Confirm understanding before moving to MCP decoupling.</p>
+      </div>
+      <div class="card-body">
+        <div class="checkpoint">
+          <ol class="qa">
+            <li>
+              Where does schema live in this lesson?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l2-a1">Reveal answer</button>
+                <span id="l2-a1" class="answer">In <code>tools.py</code>, as <code>TOOL_SCHEMAS</code>.</span>
+              </div>
+            </li>
+            <li>
+              Why can schema exist before implementation?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l2-a2">Reveal answer</button>
+                <span id="l2-a2" class="answer">Because schema defines the interface contract; behavior can be added later.</span>
+              </div>
+            </li>
+            <li>
+              In which step should real OpenAI call first appear?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l2-a3">Reveal answer</button>
+                <span id="l2-a3" class="answer">Agent Step 4, after loop/logger/tools are already in place.</span>
+              </div>
+            </li>
+            <li>
+              Who owns loop control in this architecture?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l2-a4">Reveal answer</button>
+                <span id="l2-a4" class="answer"><code>agent.py</code> owns loop control (steps, stop conditions, and orchestration).</span>
+              </div>
+            </li>
+            <li>
+              Does storage know that an agent exists?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l2-a5">Reveal answer</button>
+                <span id="l2-a5" class="answer">No. <code>storage.py</code> remains model-agnostic and unaware of agent/runtime orchestration.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="lesson-1-baseline.html">Back: Lesson 1</a>
+          <a class="lesson-link" href="lesson-3-mcp-decoupling.html">Next: Lesson 3</a>
+        </div>
+      </div>
+    </section>
+  </main>
 
-<p><hr/></p>
-
-<p><h2>2.9 What the Agent Should Be Able to Do</h2></p>
-
-<p>Example interaction:</p>
-
-<p>User:</p>
-
-<p><pre><code>
-python main.py --goal "Add buy milk and then show me all tasks"
-</code></pre></p>
-
-<p>Agent:</p>
-
-<p>1. Decides to call add_task  </p>
-<p>2. Decides to call list_tasks  </p>
-<p>3. Stops</p>
-
-<p>That’s it.</p>
-
-<p>No planning intelligence yet.</p>
-
-<p>Just loop + tool execution.</p>
-
-<p><hr/></p>
-
-<p><h2>2.10 Agent Loop Diagram</h2></p>
-
-<p><pre><code>
-goal = user input
-
-for step in range(max_steps):
-    call model
-    if model requests tool:
-        execute tool
-        append tool result
-    else:
-        break
-
-return final answer
-</code></pre></p>
-
-<p>If your code does not look like this —  </p>
-<p>you do not have a real agent.</p>
-
-<p><hr/></p>
-
-<p><h2>2.11 Guardrails</h2></p>
-
-<p>You must ensure:</p>
-
-<ul>
-<li>max_steps hard limited  </li>
-<li>No while True loops  </li>
-<li>No recursive self calls  </li>
-<li>Tool whitelist  </li>
-<li>Graceful failure if tool unknown  </li>
-</ul>
-
-<p>This prevents runaway costs.</p>
-
-<p><hr/></p>
-
-<p><h2>2.12 Where Codex Ends and Runtime Begins</h2></p>
-
-<p>Codex:</p>
-<ul>
-<li>Writes agent.py</li>
-</ul>
-
-<p>Runtime:</p>
-<ul>
-<li>Executes agent.py</li>
-</ul>
-
-<p>This separation is critical.</p>
-
-<p>Codex is not in the execution loop.</p>
-
-<p><hr/></p>
-
-<p><h2>🎯 Lesson 2 Checkpoint</h2></p>
-
-<p>Answer clearly:</p>
-
-<p>1. Who owns the loop?  </p>
-<p>2. Who executes tools?  </p>
-<p>3. Where does token usage occur?  </p>
-<p>4. Can MCP server replace tools.py?  </p>
-<p>5. Does storage know that an agent exists?  </p>
-
-<p>If these are clear,  </p>
-<p>you understand the difference between:</p>
-
-<ul>
-<li>Deterministic app  </li>
-<li>Agent-wrapped app  </li>
-</ul>
-
-<p><hr/></p>
-
-<p><h2>🔜 Next Lesson Preview</h2></p>
-
-<p>Lesson 3 will:</p>
-
-<ul>
-<li>Replace local tools with a minimal MCP server  </li>
-<li>Keep agent unchanged  </li>
-<li>Demonstrate decoupling  </li>
-<li>Show why MCP exists  </li>
-</ul>
-
-<p>You will see architecture separation become real.</p>
+  <script src="app.js"></script>
 </body>
 </html>

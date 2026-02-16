@@ -57,17 +57,26 @@
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">L5</span> Create a minimal UI file</h3>
-        <p>Keep it clean and small.</p>
+        <h3><span class="marker">L5</span> Create a minimal UI file (Qt6)</h3>
+        <p>Use a professional UI framework while keeping boundaries clean.</p>
       </div>
       <div class="card-body">
+        <div class="note">
+          <h4>Qt6 background (short)</h4>
+          <ul>
+            <li>Qt6 is a mature cross-platform desktop UI framework.</li>
+            <li>PySide6 is the official Python binding for Qt6.</li>
+            <li>It uses an event-driven model (signals/slots), which fits app-style interfaces well.</li>
+            <li>It is heavier than Tkinter, but scales better for richer UIs.</li>
+          </ul>
+        </div>
         <div class="grid-2">
           <article class="prompt-box">
             <div class="box-title">
               <span>Prompt to paste into Codex</span>
               <button class="copy-btn" data-copy-target="l5-prompt-ui">Copy</button>
             </div>
-            <pre id="l5-prompt-ui" class="code">Create ui.py.
+            <pre id="l5-prompt-ui" class="code">Create ui.py using PySide6 (Qt6).
 Requirements:
 - Simple window with:
   - Text input field
@@ -82,9 +91,9 @@ Add comments explaining separation of concerns.</pre>
           <article class="task-box">
             <div class="box-title"><span>Student task after generation</span></div>
             <ul class="task-list">
-              <li>Confirm UI imports only UI and shared-app modules.</li>
-              <li>Confirm no model/tool logic was copied into UI.</li>
-              <li>Confirm design remains single-entry-point friendly.</li>
+              <li>Run <code>python main.py --gui</code> and confirm the window opens correctly.</li>
+              <li>Enter a sample goal, click Submit, and confirm output appears in the UI.</li>
+              <li>Submit twice with different goals and confirm the UI remains responsive and updates output each time.</li>
             </ul>
           </article>
         </div>
