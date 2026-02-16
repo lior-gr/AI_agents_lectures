@@ -175,6 +175,18 @@ Expected output after Agent Step 1:
 - agent.py exists with bounded loop skeleton.
 - model interaction is still stubbed.
 
+Student task for Step 1:
+
+1. Confirm only loop skeleton primitives were added.
+2. Confirm model and tools are still stubs.
+3. Explain why agent owns stop conditions and step limit.
+
+Run to verify:
+
+```bash
+python -c "from pathlib import Path; s=Path('agent.py').read_text(encoding='utf-8'); print('run_agent' in s and 'max_steps' in s and 'stop' in s)"
+```
+
 Step 2 prompt (logger):
 
 > Update agent.py logging.
@@ -195,6 +207,18 @@ Expected output after Agent Step 2:
 - logging contract is implemented.
 - step and stop reason fields exist where relevant.
 
+Student task for Step 2:
+
+1. Confirm logging uses the required format.
+2. Confirm required event names appear in code path.
+3. Confirm no secrets are logged.
+
+Run to verify:
+
+```bash
+python -c "from pathlib import Path; s=Path('agent.py').read_text(encoding='utf-8'); print('%(asctime)s [%(levelname)s] %(message)s' in s and 'agent_start' in s and 'tool_called' in s and 'stop' in s)"
+```
+
 Step 3 prompt (wire tools):
 
 > Update agent.py.
@@ -210,6 +234,18 @@ Expected output after Agent Step 3:
 
 - tool calls execute through tools.py.
 - model call is still stubbed.
+
+Student task for Step 3:
+
+1. Confirm tool execution now routes via `tools.py`.
+2. Confirm model call remains stubbed.
+3. Confirm no loop/stop-condition logic changed.
+
+Run to verify:
+
+```bash
+python -c "from pathlib import Path; s=Path('agent.py').read_text(encoding='utf-8'); print('TOOL_SCHEMAS' in s and ('from tools import' in s or 'import tools' in s) and 'tool_result' in s)"
+```
 
 Step 4 prompt (OpenAI call):
 
@@ -228,20 +264,20 @@ Step 4 prompt (OpenAI call):
 > - In Codex chat response: summarize model-call settings and error handling.
 > - In both: explain why this step changes only model interaction.
 
-OpenAI API key concept and Windows PowerShell setup:
+OpenAI API key concept and shell setup:
 
 Concept:
 
 - `OPENAI_API_KEY` is a secret credential used by your runtime app to authenticate with OpenAI.
-- Never hardcode it in source files.
-- Never commit it to git.
-- Load it from environment variables at runtime.
+- Generate it in the OpenAI dashboard (API keys page), then copy/store it securely because it is shown only once.
+- API usage has real cost; set billing budgets/limits and usage alerts before running repeated tests.
+- Never hardcode it in source files, never commit it to git, and load it from environment variables at runtime.
 
-Windows PowerShell (session only):
-
-```powershell
-$env:OPENAI_API_KEY = "your_key_here"
-```
+| Shell | Command |
+| --- | --- |
+| PowerShell | `$env:OPENAI_API_KEY = "your_key_here"` |
+| Unix bash | `export OPENAI_API_KEY="your_key_here"` |
+| Unix tcsh | `setenv OPENAI_API_KEY "your_key_here"` |
 
 Expected output after Agent Step 4:
 
@@ -258,12 +294,13 @@ $env:OPENAI_API_KEY = "your_key_here"
 
 2. Confirm `agent.py` reads key from environment variable only.
 3. Do not run end-to-end goal yet; first full run happens in 2.6 after CLI wiring.
+4. Confirm loop and tool execution flow remained unchanged.
 
-Student task after each agent step:
+Run to verify:
 
-1. Confirm each step only changes intended code.
-2. Confirm model call stays stubbed until Step 4.
-3. After each step, explain which layer changed (agent, tools, or storage) and why that layer owns the change.
+```bash
+python -c "import os; print('OPENAI_API_KEY set:', bool(os.getenv('OPENAI_API_KEY')))"
+```
 
 ---
 

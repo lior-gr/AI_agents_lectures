@@ -225,6 +225,28 @@ main.content {
   padding-left: 18px;
 }
 
+.grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 0.84rem;
+  color: #2f496a;
+}
+
+.grid-table th,
+.grid-table td {
+  border: 1px solid #b8cbe4;
+  padding: 8px 10px;
+  vertical-align: top;
+  text-align: left;
+}
+
+.grid-table th {
+  background: #eaf2ff;
+  color: #123063;
+  font-weight: 700;
+}
+
 .diagram {
   margin: 12px 0;
   border: 1px solid #334155;

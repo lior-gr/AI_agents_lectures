@@ -272,8 +272,8 @@ Explanation placement:
         <p>Start with loop skeleton, then progressively activate features.</p>
       </div>
       <div class="card-body">
-        <div class="grid-2">
-          <div class="prompt-stack">
+        <div class="prompt-stack">
+          <div class="grid-2">
             <article class="prompt-box">
               <div class="box-title">
                 <span>Step 1 prompt</span>
@@ -293,15 +293,29 @@ Explanation placement:
 - In Codex chat response: summarize loop flow and stop behavior.
 - In both: explain why model and tools remain stubbed in Step 1.</pre>
             </article>
-            <div class="note">
-              <h4>Expected output after Step 1</h4>
-              <ul>
-                <li><code>agent.py</code> exists with loop skeleton.</li>
-                <li>Model interaction is still a stub.</li>
-                <li>Stop conditions are explicit.</li>
+            <article class="task-box">
+              <div class="box-title">
+                <span>Student task for Step 1</span>
+              </div>
+              <ul class="task-list">
+                <li>Confirm only loop skeleton primitives were added.</li>
+                <li>Confirm model and tools are still stubs.</li>
+                <li>Explain why agent owns stop conditions and step limit.</li>
               </ul>
-            </div>
+              <p>Run to verify:</p>
+              <pre class="code">python -c "from pathlib import Path; s=Path('agent.py').read_text(encoding='utf-8'); print('run_agent' in s and 'max_steps' in s and 'stop' in s)"</pre>
+            </article>
+          </div>
+          <div class="note">
+            <h4>Expected output after Step 1</h4>
+            <ul>
+              <li><code>agent.py</code> exists with loop skeleton.</li>
+              <li>Model interaction is still a stub.</li>
+              <li>Stop conditions are explicit.</li>
+            </ul>
+          </div>
 
+          <div class="grid-2">
             <article class="prompt-box">
               <div class="box-title">
                 <span>Step 2 prompt</span>
@@ -321,14 +335,28 @@ Explanation placement:
 - In Codex chat response: summarize log format and where events appear.
 - In both: explain why logging is added before live model calls.</pre>
             </article>
-            <div class="note">
-              <h4>Expected output after Step 2</h4>
-              <ul>
-                <li>Logging contract is implemented.</li>
-                <li>Step and stop reason fields appear where relevant.</li>
+            <article class="task-box">
+              <div class="box-title">
+                <span>Student task for Step 2</span>
+              </div>
+              <ul class="task-list">
+                <li>Confirm logging uses the required format.</li>
+                <li>Confirm required event names appear in code path.</li>
+                <li>Confirm no secrets are logged.</li>
               </ul>
-            </div>
+              <p>Run to verify:</p>
+              <pre class="code">python -c "from pathlib import Path; s=Path('agent.py').read_text(encoding='utf-8'); print('%(asctime)s [%(levelname)s] %(message)s' in s and 'agent_start' in s and 'tool_called' in s and 'stop' in s)"</pre>
+            </article>
+          </div>
+          <div class="note">
+            <h4>Expected output after Step 2</h4>
+            <ul>
+              <li>Logging contract is implemented.</li>
+              <li>Step and stop reason fields appear where relevant.</li>
+            </ul>
+          </div>
 
+          <div class="grid-2">
             <article class="prompt-box">
               <div class="box-title">
                 <span>Step 3 prompt</span>
@@ -344,15 +372,29 @@ Explanation placement:
 - In Codex chat response: summarize which files changed and why.
 - In both: explain why loop control must remain unchanged.</pre>
             </article>
-            <div class="note">
-              <h4>Expected output after Step 3</h4>
-              <ul>
-                <li>Tool calls execute through <code>tools.py</code>.</li>
-                <li>Model call is still stubbed.</li>
-                <li>Loop logic remains unchanged.</li>
+            <article class="task-box">
+              <div class="box-title">
+                <span>Student task for Step 3</span>
+              </div>
+              <ul class="task-list">
+                <li>Confirm tool execution now routes via <code>tools.py</code>.</li>
+                <li>Confirm model call remains stubbed.</li>
+                <li>Confirm no loop/stop-condition logic changed.</li>
               </ul>
-            </div>
+              <p>Run to verify:</p>
+              <pre class="code">python -c "from pathlib import Path; s=Path('agent.py').read_text(encoding='utf-8'); print('TOOL_SCHEMAS' in s and ('from tools import' in s or 'import tools' in s) and 'tool_result' in s)"</pre>
+            </article>
+          </div>
+          <div class="note">
+            <h4>Expected output after Step 3</h4>
+            <ul>
+              <li>Tool calls execute through <code>tools.py</code>.</li>
+              <li>Model call is still stubbed.</li>
+              <li>Loop logic remains unchanged.</li>
+            </ul>
+          </div>
 
+          <div class="grid-2">
             <article class="prompt-box">
               <div class="box-title">
                 <span>Step 4 prompt</span>
@@ -374,25 +416,6 @@ Explanation placement:
 - In Codex chat response: summarize model-call settings and error handling.
 - In both: explain why this step changes only model interaction.</pre>
             </article>
-            <div class="note" id="step4-api-key">
-              <h4>OpenAI API key concept and Windows PowerShell setup</h4>
-              <ul>
-                <li><code>OPENAI_API_KEY</code> is a secret credential used by your runtime app to authenticate API calls.</li>
-                <li>Never hardcode it in source files.</li>
-                <li>Never commit it to git or paste it into shared docs.</li>
-                <li>Load it from environment variables at runtime.</li>
-              </ul>
-              <h4>Windows PowerShell (session only)</h4>
-              <pre class="code">$env:OPENAI_API_KEY = "your_key_here"</pre>
-            </div>
-            <div class="note">
-              <h4>Expected output after Step 4</h4>
-              <ul>
-                <li>OpenAI interaction is live.</li>
-                <li>Loop + logger + tools continue to work unchanged.</li>
-                <li>Agent is now operational with bounded behavior.</li>
-              </ul>
-            </div>
             <article class="task-box">
               <div class="box-title">
                 <span>Student task for Step 4</span>
@@ -402,21 +425,51 @@ Explanation placement:
               <ul class="task-list">
                 <li>Confirm <code>agent.py</code> reads the key from environment variable only.</li>
                 <li>Do not run end-to-end goal yet; first full run happens in P7 after CLI wiring.</li>
+                <li>Confirm loop and tool execution flow remained unchanged.</li>
               </ul>
+              <p>Run to verify:</p>
+              <pre class="code">python -c "import os; print('OPENAI_API_KEY set:', bool(os.getenv('OPENAI_API_KEY')))"</pre>
             </article>
           </div>
-
-          <article class="task-box">
-            <div class="box-title">
-              <span>Student task after each step</span>
-            </div>
-            <ul class="task-list">
-              <li>Confirm each step only changes its intended area.</li>
-              <li>Reject hidden architecture changes.</li>
-              <li>After each step, explain which layer changed (agent, tools, or storage) and why that layer owns the change.</li>
-              <li>Confirm the model call stays stubbed until Step 4.</li>
+          <div class="note" id="step4-api-key">
+            <h4>OpenAI API key concept and shell setup</h4>
+            <ul>
+              <li><code>OPENAI_API_KEY</code> is a secret credential used by your runtime app to authenticate API calls.</li>
+              <li>Generate it in the OpenAI dashboard (API keys page), then copy/store it securely because it is shown only once.</li>
+              <li>API usage has real cost; set billing budgets/limits and usage alerts before running repeated tests.</li>
+              <li>Never hardcode it in source files, never commit it to git, and load it from environment variables at runtime.</li>
             </ul>
-          </article>
+            <table class="grid-table">
+              <thead>
+                <tr>
+                  <th>Shell</th>
+                  <th>Command</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>PowerShell</td>
+                  <td><code>$env:OPENAI_API_KEY = "your_key_here"</code></td>
+                </tr>
+                <tr>
+                  <td>Unix bash</td>
+                  <td><code>export OPENAI_API_KEY="your_key_here"</code></td>
+                </tr>
+                <tr>
+                  <td>Unix tcsh</td>
+                  <td><code>setenv OPENAI_API_KEY "your_key_here"</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="note">
+            <h4>Expected output after Step 4</h4>
+            <ul>
+              <li>OpenAI interaction is live.</li>
+              <li>Loop + logger + tools continue to work unchanged.</li>
+              <li>Agent is now operational with bounded behavior.</li>
+            </ul>
+          </div>
         </div>
       </div>
     </section>
