@@ -1,8 +1,8 @@
-# Appendix C — Bounded Model-Assisted Skill Routing Using Codex (No Keyword Fallback)
+# Appendix B — Bounded Model-Assisted Skill Routing Using Codex (No Keyword Fallback)
 
 ---
 
-## C.1 Goal
+## B.1 Goal
 
 Keyword routing is weak. We want synonyms and disambiguation without giving the model full control.
 
@@ -18,7 +18,7 @@ This is implemented **with Codex writing the code**, step by step.
 
 ---
 
-## C.2 Conceptual Diagram
+## B.2 Conceptual Diagram
 
 ```
 User goal text
@@ -38,7 +38,7 @@ Routing affects **prompt composition only**.
 
 ---
 
-## C.3 Prerequisites
+## B.3 Prerequisites
 
 You already have from earlier lessons:
 
@@ -55,7 +55,7 @@ Also:
 
 ---
 
-## C.4 The bounded routing contract
+## B.4 The bounded routing contract
 
 ### Allowed skills enum
 
@@ -91,7 +91,7 @@ If invalid: retry (no fallback).
 
 ---
 
-## C.5 Lesson → Task → Expected output → Explanation (Codex driven)
+## B.5 Lesson → Task → Expected output → Explanation (Codex driven)
 
 ### Lesson: Create a dedicated router module
 
@@ -189,7 +189,7 @@ You are changing **instructions** presented to the model, not the runtime mechan
 
 ---
 
-## C.6 Fail state behavior (no fallback)
+## B.6 Fail state behavior (no fallback)
 
 When routing fails after `max_attempts`:
 
@@ -205,7 +205,7 @@ Why:
 
 ---
 
-## C.7 Practical tests (run after Codex implementation)
+## B.7 Practical tests (run after Codex implementation)
 
 Run these commands and observe:
 
@@ -234,7 +234,7 @@ Tip:
 
 ---
 
-## C.8 Checkpoint
+## B.8 Checkpoint
 
 Answer:
 
@@ -247,8 +247,9 @@ If these are clear, you have a robust alternative to keyword routing while stayi
 
 ---
 
-## C.9 Notes and sources
+## B.9 Notes and sources
 
 Codex skills are typically described as directories containing `SKILL.md` and loaded via progressive disclosure. citeturn0search2turn0search3
 
 This appendix uses our course project style (skills as simple `.md` files loaded by the runtime agent) while keeping the same mental model: skills are passive instructions, not tools. citeturn0search2
+

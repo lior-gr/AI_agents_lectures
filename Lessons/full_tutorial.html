@@ -349,9 +349,8 @@
     <a href="#lesson-3">Lesson 3 - MCP Decoupling</a>
     <a href="#lesson-4">Lesson 4 - Skills</a>
     <a href="#lesson-5">Lesson 5 - UI Boundary</a>
-    <a href="#appendix-a">Appendix A - Multiple Skills</a>
-    <a href="#appendix-b">Appendix B - Deterministic Router</a>
-    <a href="#appendix-c">Appendix C - Bounded Model Router</a>
+    <a href="#appendix-a">Appendix A - Deterministic Routing</a>
+    <a href="#appendix-b">Appendix B - Bounded Model Router</a>
   </aside>
 
   <main>
@@ -920,7 +919,7 @@ Do not modify agent, MCP, or storage.</pre>
 
     <section id="appendix-a" class="panel">
       <div class="panel-header">
-        <h3 class="lesson-title"><span class="marker">A</span> Appendix A - Multiple skills and deterministic selection</h3>
+        <h3 class="lesson-title"><span class="marker">A</span> Appendix A - Deterministic multi-skill routing (concept + code)</h3>
         <p class="lesson-intro">Organize global policy skills, conditional domain skills, and output-format skills with deterministic routing rules.</p>
       </div>
       <div class="panel-body">
@@ -973,15 +972,13 @@ Add this header: "This is a skill, not a tool."</pre>
             </ul>
           </article>
         </div>
-      </div>
-    </section>
-
-    <section id="appendix-b" class="panel">
-      <div class="panel-header">
-        <h3 class="lesson-title"><span class="marker">B</span> Appendix B - Deterministic load_skills router</h3>
-        <p class="lesson-intro">A debug-friendly deterministic router for selecting optional skills from keyword triggers.</p>
-      </div>
-      <div class="panel-body">
+        <div class="k-block">
+          <h5>Merged reference code</h5>
+          <p>
+            Appendix B was merged into this appendix on February 16, 2026. Use this deterministic router
+            implementation as the baseline.
+          </p>
+        </div>
         <div class="k-block">
           <h5>Ordering rule</h5>
           <ul>
@@ -1005,9 +1002,9 @@ Add this header: "This is a skill, not a tool."</pre>
       </div>
     </section>
 
-    <section id="appendix-c" class="panel">
+    <section id="appendix-b" class="panel">
       <div class="panel-header">
-        <h3 class="lesson-title"><span class="marker">C</span> Appendix C - Bounded model-assisted skill routing</h3>
+        <h3 class="lesson-title"><span class="marker">B</span> Appendix B - Bounded model-assisted skill routing</h3>
         <p class="lesson-intro">Replace keyword routing with a bounded model classifier that outputs strict JSON and is validated deterministically.</p>
       </div>
       <div class="panel-body">
@@ -1075,7 +1072,7 @@ Requirements:
           </article>
         </div>
         <div class="checkpoint">
-          <h5>Appendix C checkpoint</h5>
+          <h5>Appendix B checkpoint</h5>
           <ol class="qa">
             <li>
               Who controls allowed skill set?

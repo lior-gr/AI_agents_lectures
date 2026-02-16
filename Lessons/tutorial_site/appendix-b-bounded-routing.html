@@ -1,0 +1,408 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Appendix B - Bounded routing | Agents, Skills, MCP server &amp; Tools.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="page-layout">
+  <aside class="sidebar">
+    <h1>Agents, Skills, MCP server &amp; Tools.</h1>
+    <p>Concept first. Then action.</p>
+    <a href="index.html">Start here</a>
+    <a href="lesson-0-foundations.html">Lesson 0 - Foundations</a>
+    <a href="lesson-1-baseline.html">Lesson 1 - Baseline</a>
+    <a href="lesson-2-agent-loop.html">Lesson 2 - Agent loop</a>
+    <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
+    <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
+    <a href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <a href="appendix-a-multiple-skills.html">Appendix A - Deterministic routing</a>
+    <a class="active" href="appendix-b-bounded-routing.html">Appendix B - Bounded routing</a>
+    <div class="sidebar-map">
+      <h2>Appendix B map</h2>
+      <a class="sidebar-sub-link" href="#p1-outcomes">P1: What you will learn</a>
+      <a class="sidebar-sub-link" href="#b1">B.1 Goal and prerequisites</a>
+      <a class="sidebar-sub-link" href="#b2">B.2 Term onboarding and diagram</a>
+      <a class="sidebar-sub-link" href="#b3">B.3 Bounded routing contract</a>
+      <a class="sidebar-sub-link" href="#b4">B.4 Implementation prompts</a>
+      <a class="sidebar-sub-link" href="#b5">B.5 Fail state behavior</a>
+      <a class="sidebar-sub-link" href="#b6">B.6 Practical tests</a>
+      <a class="sidebar-sub-link" href="#b7">B.7 Checkpoint</a>
+    </div>
+  </aside>
+
+  <main class="content">
+    <header class="hero">
+      <h2>Appendix B - Bounded model-assisted skill routing</h2>
+      <p>
+        This appendix upgrades deterministic keyword routing with a bounded model classifier:
+        strict JSON output, deterministic validation, retries, and no keyword fallback.
+      </p>
+    </header>
+
+    <section class="card" id="b0-map">
+      <div class="card-head">
+        <h3><span class="marker">MAP</span> Appendix map</h3>
+        <p>Use this map to navigate Appendix B in order.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li><a class="map-link" href="#p1-outcomes">P1: What you will learn in this appendix.</a></li>
+            <li><a class="map-link" href="#b1">B.1 Goal and prerequisites.</a></li>
+            <li><a class="map-link" href="#b2">B.2 Term onboarding and system diagram.</a></li>
+            <li><a class="map-link" href="#b3">B.3 Bounded routing contract.</a></li>
+            <li><a class="map-link" href="#b4">B.4 Implementation prompts.</a></li>
+            <li><a class="map-link" href="#b5">B.5 Fail state behavior.</a></li>
+            <li><a class="map-link" href="#b6">B.6 Practical tests.</a></li>
+            <li><a class="map-link" href="#b7">B.7 Checkpoint.</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p1-outcomes"><span class="marker">P1</span> What you will learn in this appendix</h3>
+        <p>These outcomes define what "Appendix B complete" means.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>By the end of this page, you should be clear on:</h4>
+          <ul>
+            <li>Explain bounded model-assisted routing in plain language.</li>
+            <li>Enforce strict JSON contract and deterministic validation.</li>
+            <li>Implement no-fallback fail state safely.</li>
+            <li>Keep loop control and tool execution unchanged.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="b1">
+      <div class="card-head">
+        <h3><span class="marker">B.1</span> Goal and prerequisites</h3>
+        <p>Define the scope before writing router code.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Goal</h4>
+          <p>
+            Keyword routing alone is often weak for synonyms and disambiguation.
+            Bounded model routing keeps model flexibility while limiting outcomes to a fixed skill enum.
+          </p>
+        </div>
+        <div class="note">
+          <h4>Prerequisites</h4>
+          <ul>
+            <li><code>agent.py</code> has a stable loop.</li>
+            <li><code>skills/always_on.md</code> exists.</li>
+            <li>Optional skill files exist for planning/reporting/output.</li>
+            <li>Runtime OpenAI API key is configured.</li>
+          </ul>
+        </div>
+        <div class="example">
+          <h4>Development vs runtime separation</h4>
+          <p>
+            Codex creates or edits <code>skill_router.py</code> and <code>agent.py</code> during development.
+            At runtime, your agent process makes router calls directly. Codex is not in that runtime execution path.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="b2">
+      <div class="card-head">
+        <h3><span class="marker">B.2</span> New term onboarding and system diagram</h3>
+        <p>Learn the term first, then inspect the flow.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>New term: Bounded model-assisted routing</h4>
+          <p><strong>Definition:</strong> a model classifies intent into a fixed allowed enum, then deterministic validation accepts or rejects the output.</p>
+          <p><strong>Why it matters:</strong> better intent handling than keywords, with bounded safety.</p>
+          <p><strong>Where in code:</strong> <code>skill_router.py</code> and <code>agent.py</code> prompt construction.</p>
+          <h5>Snippet</h5>
+          <pre class="code">ok, skills, reason = route_skills_with_model(goal, call_router_model, max_attempts=3)
+if not ok:
+    skills = []  # always_on still applies</pre>
+          <h5>Verification checklist</h5>
+          <ul>
+            <li>Unknown skill names are rejected.</li>
+            <li>Bad JSON retries until max attempts.</li>
+            <li>Fail state uses always_on only.</li>
+            <li>Main loop and MCP tool logic stay unchanged.</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h4>What this diagram illustrates</h4>
+          <p>Routing affects prompt composition only. Agent loop and tools remain unchanged.</p>
+        </div>
+        <div class="diagram">Development lane:
+Codex edits skill_router.py and agent.py
+      |
+      v
+Runtime lane:
+User goal text
+  -> bounded router model call
+  -> strict JSON validation
+  -> selected optional skills
+  -> prompt assembly (always_on + selected)
+  -> normal agent loop (unchanged)
+  -> MCP tools (unchanged)</div>
+        <div class="example">
+          <h4>Course example</h4>
+          <p>
+            Goal "print tasks in JSON" can route to <code>status_reporting</code> + <code>output_format</code>
+            if validated. If routing keeps failing, runtime still proceeds with <code>always_on</code> only.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="b3">
+      <div class="card-head">
+        <h3><span class="marker">B.3</span> Bounded routing contract</h3>
+        <p>Declare allowed outputs and reject anything outside the contract.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Allowed optional skill enum</h4>
+          <ul>
+            <li><code>task_planning</code></li>
+            <li><code>status_reporting</code></li>
+            <li><code>output_format</code></li>
+          </ul>
+          <p><code>always_on</code> is not routable because it is injected every time.</p>
+        </div>
+        <div class="note">
+          <h4>Strict JSON output shape</h4>
+          <pre class="code">{
+  "skills": ["task_planning", "output_format"],
+  "confidence": 0.82,
+  "notes": "One short sentence."
+}</pre>
+          <h5>Validation rules</h5>
+          <ul>
+            <li>Must parse as JSON object.</li>
+            <li>Keys must be exactly <code>skills</code>, <code>confidence</code>, <code>notes</code>.</li>
+            <li><code>skills</code> uses only allowed names and no duplicates.</li>
+            <li><code>confidence</code> is numeric and in [0, 1].</li>
+            <li><code>notes</code> is short string (for logs only).</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="b4">
+      <div class="card-head">
+        <h3><span class="marker">B.4</span> Implementation prompts</h3>
+        <p>Apply these in order to keep changes bounded and testable.</p>
+      </div>
+      <div class="card-body">
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt 1: Create skill_router.py</span>
+              <button class="copy-btn" data-copy-target="c-prompt-router-module">Copy</button>
+            </div>
+            <pre id="c-prompt-router-module" class="code">Create skill_router.py with:
+- ALLOWED_SKILLS
+- route_skills_with_model(goal: str, call_model_fn, max_attempts: int) -> (ok, skills, reason)
+
+Requirements:
+- Build routing prompt with allowed enum and short skill descriptions
+- Demand JSON only
+- Validate JSON deterministically
+- Retry until success or fail state
+- No keyword fallback
+- Standard library only (json, typing)
+- ASCII-only strings
+
+Explanation channel contract:
+1) In-file comments:
+   - validator checks and retry intent
+2) Codex chat explanation:
+   - safety tradeoffs and failure behavior
+3) Both:
+   - critical reject conditions (wrong keys, unknown skills, duplicates, non-JSON)</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student verification</span></div>
+            <ul class="task-list">
+              <li>Confirm invalid JSON is rejected and retried.</li>
+              <li>Confirm unknown skills are rejected.</li>
+              <li>Confirm exports include <code>ALLOWED_SKILLS</code> and router function.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt 2: Add low-cost router model call</span>
+              <button class="copy-btn" data-copy-target="c-prompt-router-call">Copy</button>
+            </div>
+            <pre id="c-prompt-router-call" class="code">In agent.py, add call_router_model(messages) -> str:
+- low temperature (0 or close)
+- small max_output_tokens
+- return raw text only
+
+Then wire it into route_skills_with_model.
+Keep main agent model path unchanged.
+
+Explanation channel contract:
+1) In-file comments: why router calls should stay cheap and deterministic
+2) Codex chat explanation: cost/latency tradeoff and verification steps</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student verification</span></div>
+            <ul class="task-list">
+              <li>Confirm router call path is separate and cheaper.</li>
+              <li>Confirm main generation path is unchanged.</li>
+              <li>Confirm logs can show selected skills during testing.</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt 3: Integrate prompt construction</span>
+              <button class="copy-btn" data-copy-target="c-prompt-integration">Copy</button>
+            </div>
+            <pre id="c-prompt-integration" class="code">In agent.py prompt construction:
+1) Always load skills/always_on.md
+2) Route optional skills with route_skills_with_model(..., max_attempts=3)
+3) If routing ok, load selected skills from skills/<name>.md
+4) If routing fails, load no optional skills
+5) Concatenate with "\\n\\n---\\n\\n"
+
+Requirements:
+- Do not change loop structure
+- Do not change tool execution logic
+- State in comments: routing affects reasoning only</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student verification</span></div>
+            <ul class="task-list">
+              <li>Confirm only reasoning input changed.</li>
+              <li>Confirm tool behavior and control flow are unchanged.</li>
+              <li>Confirm fail state still runs safely with always_on only.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="b5">
+      <div class="card-head">
+        <h3><span class="marker">B.5</span> Fail state behavior (no fallback)</h3>
+        <p>Define failure behavior explicitly to avoid hidden routing errors.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li>After <code>max_attempts</code> failures, apply only <code>always_on</code>.</li>
+            <li>Continue normal agent loop.</li>
+            <li>Optional: one-line debug log that routing failed.</li>
+          </ul>
+          <p>
+            This avoids silent misrouting and avoids keyword fallback guessing when classifier output is invalid.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="b6">
+      <div class="card-head">
+        <h3><span class="marker">B.6</span> Practical tests</h3>
+        <p>Run these examples after implementation to validate behavior.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Synonyms</h4>
+          <ul>
+            <li>Goal: "display my tasks" - expected <code>status_reporting</code></li>
+            <li>Goal: "print tasks in JSON" - expected <code>status_reporting + output_format</code></li>
+          </ul>
+        </div>
+        <div class="note">
+          <h4>Disambiguation</h4>
+          <ul>
+            <li>Goal: "add tasks about planning a TV show"</li>
+            <li>Expected: often empty skill selection or low-confidence routing, but no crash.</li>
+          </ul>
+        </div>
+        <div class="note">
+          <h4>Mixed intent</h4>
+          <ul>
+            <li>Goal: "plan today in a markdown table"</li>
+            <li>Expected: <code>task_planning + output_format</code></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="b7">
+      <div class="card-head">
+        <h3><span class="marker">B.7</span> Checkpoint</h3>
+        <p>Confirm control boundaries before using this pattern in production.</p>
+      </div>
+      <div class="card-body">
+        <div class="checkpoint">
+          <h4>Checkpoint questions</h4>
+          <ol class="qa">
+            <li>
+              Who controls which skills are possible?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="b-a1">Reveal answer</button>
+                <span id="b-a1" class="answer">The fixed enum and deterministic validator in router code.</span>
+              </div>
+            </li>
+            <li>
+              Who validates router output?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="b-a2">Reveal answer</button>
+                <span id="b-a2" class="answer">Your deterministic validation function, not the model itself.</span>
+              </div>
+            </li>
+            <li>
+              What happens if routing fails after all retries?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="b-a3">Reveal answer</button>
+                <span id="b-a3" class="answer">Fail state: no optional skills, proceed with always_on only.</span>
+              </div>
+            </li>
+            <li>
+              Did we change the agent loop?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="b-a4">Reveal answer</button>
+                <span id="b-a4" class="answer">No. Loop and tool execution remain unchanged.</span>
+              </div>
+            </li>
+            <li>
+              At runtime, does Codex call your agent?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="b-a5">Reveal answer</button>
+                <span id="b-a5" class="answer">No. Codex is development-time assistance; runtime is separate.</span>
+              </div>
+            </li>
+          </ol>
+        </div>
+        <div class="lesson-nav">
+          <a class="lesson-link" href="appendix-a-multiple-skills.html">Back: Appendix A</a>
+          <a class="lesson-link" href="index.html">Back to overview</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
+
+
+
+
