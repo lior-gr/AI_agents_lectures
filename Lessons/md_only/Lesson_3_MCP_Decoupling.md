@@ -1,131 +1,112 @@
-# 🧠 Tutorial: Codex, Agents, MCP & Skills  
-# Lesson 3 — Decoupling with a Minimal MCP Server
+# Tutorial: Codex, Agents, MCP and Skills
+# Lesson 3 - Decoupling with a Minimal MCP Server
 
 ---
 
-## 🎯 Goal of This Lesson
+## Goal of This Lesson
 
-In Lesson 2, our agent called local Python functions directly via tools.py.
+In Lesson 2, our agent called local execution directly.
 
 Now we will:
 
 - Move tools behind a minimal MCP-style server
-- Keep the agent unchanged
+- Keep the agent loop unchanged
 - Prove architectural decoupling
 - Understand why MCP exists
 
-This is where abstraction becomes real.
+This is where execution abstraction becomes concrete.
 
 ---
 
-## 3.1 What Changes — and What Does Not
+## 3.1 What You Will Learn
+
+By the end of this lesson, you should be clear on:
+
+- Why MCP separates execution from reasoning and loop control
+- How to build a deterministic local MCP server over stdin/stdout
+- How to add an MCP client and rewire only execution plumbing
+- How to verify loop logic and control guards remain unchanged
+- How this local pattern maps to future remote/enterprise setups
+
+---
+
+## 3.2 What Changes - and What Does Not
 
 What stays the same:
 
-- agent.py loop
-- max_steps guardrail
-- OpenAI API integration
-- storage.py
-- tasks_db.json
+- `agent.py` loop ownership
+- step counter and stop conditions
+- OpenAI call path and token controls
+- `storage.py` and `tasks_db.json`
 
 What changes:
 
 Instead of:
 
-```
-Agent → tools.py → storage.py
-```
-
-We will now have:
-
-```
-Agent → MCP Client → MCP Server → storage.py
+```text
+agent.py -> tools.py -> storage.py
 ```
 
-The agent will not know the difference.
+We now have:
+
+```text
+agent.py -> mcp_client.py -> mcp_server.py -> storage.py
+```
+
+Simple example:
+
+- User asks to list tasks
+- Agent still decides to call `list_tasks`
+- Only execution path changes (local call vs MCP message)
 
 ---
 
-## 3.2 Why MCP Exists
+## 3.3 Why MCP Exists
 
-MCP (Model Context Protocol) exists to:
+MCP exists to:
 
-- Decouple tools from agent runtime
-- Standardize tool discovery
+- Decouple execution from agent runtime logic
 - Allow tools to live in separate processes
-- Enable future remote / enterprise integrations
+- Support shared execution infrastructure across multiple agents
+- Provide a standard boundary for policy and observability later
 
-In our local example, this may feel unnecessary.
-
-That is intentional.
-
-We are learning architecture, not chasing convenience.
+In this local lesson, MCP may feel heavier than direct calls.
+That is intentional: we are learning architecture discipline.
 
 ---
 
-## 3.3 Minimal MCP Design (Local Version)
+## 3.4 Minimal MCP Design (Local Version)
 
-We will implement:
+We implement:
 
-- A small Python process acting as MCP server
-- Communication over stdin/stdout (JSON messages)
-- Tool registry
-- Deterministic execution
+- A standalone Python MCP server process
+- JSON request/response communication over stdin/stdout
+- Deterministic tool dispatch to storage-backed functions
 
 No networking.
-No async complexity.
-No enterprise features.
+No async framework.
+No enterprise infrastructure.
 
 ---
 
-## 3.4 New Architecture Diagram
+## 3.5 Runtime Architecture and Message Format
 
-```
+Runtime flow:
+
+```text
 main.py
-   ↓
-agent.py
-   ↓
-mcp_client.py
-   ↓ (JSON over stdio)
-mcp_server.py  (separate process)
-   ↓
-storage.py
-   ↓
-tasks_db.json
+  -> agent.py
+  -> mcp_client.py
+  -> mcp_server.py  (JSON over stdio)
+  -> storage.py
+  -> tasks_db.json
 ```
 
-Clear separation.
-
----
-
-## 3.5 Task 1 — Create MCP Server
-
-Ask Codex:
-
-> Create mcp_server.py.  
-> Requirements:  
-> - Runs as a standalone Python process  
-> - Reads JSON messages from stdin  
-> - Writes JSON responses to stdout  
-> - Supports:  
->     - add_task  
->     - list_tasks  
->     - complete_task  
-> - Calls storage.py internally  
-> - Includes detailed comments explaining:  
->     - Message format  
->     - Tool dispatch  
->     - Why this is decoupled from the agent  
-
-Keep it synchronous and simple.
-
----
-
-## Expected MCP Message Format
+Expected message format:
 
 Request:
 
-```
+```json
 {
   "tool": "add_task",
   "arguments": { "text": "Buy milk" }
@@ -134,54 +115,127 @@ Request:
 
 Response:
 
-```
+```json
 {
   "status": "ok",
   "result": "..."
 }
 ```
 
-Keep it deterministic.
+---
+
+## 3.6 Task 1 - Create MCP Server
+
+Prompt to Codex:
+
+> Create `mcp_server.py`.
+> Requirements:
+> - Runs as a standalone Python process.
+> - Reads JSON messages from stdin.
+> - Writes JSON responses to stdout.
+> - Supports: `add_task`, `list_tasks`, `complete_task`, `delete_tasks`.
+> - Calls `storage.py` internally.
+> - Keep it synchronous and deterministic.
+>
+> Add comments explaining:
+> - message format,
+> - tool dispatch,
+> - why this is decoupled from the agent.
+>
+> Explanation placement:
+> - In code comments: explain request parsing, dispatch, and deterministic errors.
+> - In Codex chat response: summarize process model and test steps.
+> - In both: explain why server has no loop/planning responsibility.
+
+Expected output after this stage:
+
+- `mcp_server.py` exists as a standalone process entry point.
+- Tool dispatch routes to storage-backed behavior only.
+- Message format is deterministic and documented.
+
+Student task after generation:
+
+1. Verify stdin request parsing and stdout response serialization are explicit.
+2. Verify unknown tools return deterministic error responses.
+3. Verify no OpenAI calls exist in `mcp_server.py`.
 
 ---
 
-## 3.6 Task 2 — Create MCP Client
+## 3.7 Task 2 - Create MCP Client
 
-Ask Codex:
+Prompt to Codex:
 
-> Create mcp_client.py.  
-> Requirements:  
-> - Starts mcp_server.py as subprocess  
-> - Sends JSON requests  
-> - Receives JSON responses  
-> - Handles errors gracefully  
-> - Explains:  
->     - Why subprocess boundary matters  
->     - How this simulates real MCP architecture  
+> Create `mcp_client.py`.
+> Requirements:
+> - Starts `mcp_server.py` as subprocess.
+> - Sends JSON requests.
+> - Receives JSON responses.
+> - Handles startup and request errors gracefully.
+>
+> Add comments explaining:
+> - why subprocess boundary matters,
+> - how this simulates real MCP architecture.
+>
+> Explanation placement:
+> - In code comments: explain subprocess lifecycle and I/O handling.
+> - In Codex chat response: summarize error paths and verification steps.
+> - In both: explain why client does not decide agent behavior.
+
+Expected output after this stage:
+
+- `mcp_client.py` exists and can send/receive deterministic JSON messages.
+- Server lifecycle is managed by client code.
+- No loop logic is introduced in client/server files.
+
+Student task after generation:
+
+1. Verify server process starts from client side only.
+2. Verify malformed or failed responses are handled clearly.
+3. Verify client API remains simple for agent integration.
 
 ---
 
-## 3.7 Modify Agent to Use MCP
+## 3.8 Task 3 - Rewire Agent Execution to MCP
 
-Now ask Codex:
+Prompt to Codex:
 
-> Modify agent.py so that tool calls go through mcp_client.py instead of calling tools.py directly.  
-> Do not modify the agent loop structure.  
-> Only replace the execution layer.  
-> Add comments explaining why the agent remains unchanged.  
+> Modify `agent.py` so tool calls go through `mcp_client.py` instead of `tools.py`.
+> Do not modify:
+> - loop logic,
+> - stop conditions,
+> - step counter,
+> - token handling.
+> Only replace the execution layer.
+>
+> Add comments explaining why the agent remains unchanged.
+>
+> Explanation placement:
+> - In code comments: explain where execution plumbing changed.
+> - In Codex chat response: list unchanged loop/control behaviors.
+> - In both: explain reasoning-path vs execution-path separation.
+
+Expected output after this stage:
+
+- Agent uses `mcp_client.py` for execution calls.
+- All control-flow guardrails remain intact.
+- Architecture boundaries are explicit and testable.
+
+Student task after generation:
+
+1. Run one goal and verify tool calls go through MCP path in logs.
+2. Confirm loop structure is unchanged by diff.
+3. Confirm MCP failures do not transfer loop ownership away from agent.
 
 ---
 
-## Critical Insight
+## 3.9 Critical Insight
 
-If done correctly:
-
-You will NOT change:
+If done correctly, you will NOT change:
 
 - Loop logic
 - Stop conditions
-- Token handling
 - Step counter
+- Token handling strategy
 
 Only execution plumbing changes.
 
@@ -189,53 +243,44 @@ That is architectural separation.
 
 ---
 
-## 3.8 What This Teaches You
+## 3.10 What This Teaches You + Scope Note
 
 You now understand:
 
-- Agent ≠ Tool executor
-- MCP server is passive
-- Agent owns the loop
-- Tools live behind boundaries
+- Agent does planning/control; MCP executes tools
+- Execution can move out-of-process without changing reasoning flow
+- Storage remains unaware of agent and MCP orchestration
 
-This is professional architecture.
+Enterprise features we are not using in this course:
 
----
+- Remote MCP servers: tools run on separate hosts/services
+- Auth and policy gates: enforce identity and permissions
+- Shared tool registries: many agents reuse one execution layer
+- Centralized observability: collect logs/traces/metrics consistently
 
-## 3.9 Enterprise What-If
-
-If we had enterprise features:
-
-- MCP server could be remote
-- Auth + policy layer could be enforced
-- Multiple agents could share tool registry
-- Observability & tracing could be centralized
-
-But the mental model remains identical.
+We exclude these now to focus on core decoupling mental model.
 
 ---
 
-## 🎯 Lesson 3 Checkpoint
+## 3.11 Lesson 3 Checkpoint
 
-Answer:
+Answer clearly:
 
-1. Did the agent loop change?  
-2. Who executes tools now?  
-3. Does the MCP server know about OpenAI?  
-4. Can multiple agents reuse the same MCP server?  
-5. Is storage aware of agent or MCP?  
-
-If you answer clearly, you now understand decoupling.
+1. Did the agent loop change in this lesson?
+2. Who executes tools now?
+3. Does the MCP server know about OpenAI?
+4. Can multiple agents reuse the same MCP server design?
+5. Is storage aware of agent or MCP?
 
 ---
 
-## 🔜 Next Lesson Preview
+## Next Lesson Preview
 
-Lesson 4 will introduce:
+Lesson 4 introduces:
 
-- Skills  
-- Structured prompt templates  
-- Domain logic injection  
-- Separation between reasoning and execution  
+- Skills
+- Structured prompt templates
+- Domain-logic injection
+- Separation between reasoning and execution
 
 You will see how skills differ from tools and MCP.
