@@ -108,7 +108,64 @@ Ask Codex:
 
 ---
 
-## 5.6 What Must Remain True
+## 5.6 Add Progress Sidebar with Selectable Views
+
+Primary reason: make agent execution flow visible so debugging is fast and reliable.
+
+This section exists to help you debug the agent execution flow step by step.
+The sidebar surfaces runtime progress events and lets you inspect them in table and tree views,
+without changing backend ownership.
+
+Ask Codex:
+
+> Extend the PySide6 UI to include an "Agent Progress" sidebar panel.
+>
+> Requirements:
+> - Keep backend interface unchanged (main.py, agent loop, MCP, storage responsibilities stay the same).
+> - The sidebar must support selectable view modes:
+>   1) Table view
+>   2) Tree view
+> - Add a clear mode selector (tabs, segmented buttons, or combo box).
+>
+> Table view requirements:
+> - Render one row per progress event.
+> - Include columns: Time, Type, Name, Details.
+> - Apply color classification by event type (for example: step_start, tool_called, tool_result, skill_route, skill_used, validation, stop, error).
+> - Keep text readable and aligned.
+>
+> Tree view requirements:
+> - Show hierarchical structure (for example: run -> step -> events).
+> - Support expand/collapse per node.
+> - Add Expand all and Collapse all controls.
+>
+> Behavior requirements:
+> - Live updates while the agent is running.
+> - Switching view mode must not lose data.
+> - No OpenAI logic in UI.
+> - No tool execution logic in UI.
+> - No direct storage writes in UI.
+>
+> Add comments explaining separation of concerns and why this is UI instrumentation only.
+
+Student task after generation (behavior only):
+
+1. Run `python main.py --gui` and submit a goal that triggers multiple events.
+2. Open the Agent Progress sidebar and confirm events appear live while the run is in progress.
+3. Switch to Table view and confirm rows are color-classified by event type.
+4. Switch to Tree view and confirm nodes can be expanded and collapsed.
+5. Use Expand all / Collapse all and confirm both controls work correctly.
+6. Switch between Table and Tree several times and confirm no events disappear.
+
+Expected output after this stage:
+
+- GUI includes a right-side Agent Progress panel.
+- The same event stream is viewable as Table and Tree.
+- Color classification improves scan speed in table mode.
+- Tree mode supports collapse/expand for fast structural understanding.
+
+---
+
+## 5.7 What Must Remain True
 
 The following files should remain untouched logically:
 
@@ -122,7 +179,7 @@ If adding UI required modifying those â€” architecture leaked.
 
 ---
 
-## 5.7 Test Scenario
+## 5.8 Test Scenario
 
 1. Launch CLI:
    python main.py --goal "Add buy milk"
@@ -139,7 +196,7 @@ If they donâ€™t â€” refactor.
 
 ---
 
-## 5.8 Why This Matters
+## 5.9 Why This Matters
 
 Most AI systems fail architecturally because:
 
@@ -156,7 +213,7 @@ That is professional layering.
 
 ---
 
-## 5.9 Optional Extension - Qt6 Enhancements
+## 5.10 Optional Extension - Qt6 Enhancements
 
 If you want more realism:
 
@@ -170,7 +227,7 @@ If backend changes were required â€” design is flawed.
 
 ---
 
-## 5.10 What This Teaches
+## 5.11 What This Teaches
 
 You now understand:
 

@@ -17,6 +17,20 @@
     <a href="lesson-3-mcp-decoupling.html">Lesson 3 - MCP decoupling</a>
     <a href="lesson-4-skills.html">Lesson 4 - Skills</a>
     <a class="active" href="lesson-5-ui-boundary.html">Lesson 5 - UI boundary</a>
+    <div class="sidebar-map">
+      <h2>Lesson 5 map</h2>
+      <a class="sidebar-sub-link" href="#p1-outcomes">P1: What you will learn</a>
+      <a class="sidebar-sub-link" href="#p2-concept">P2: Concept before coding</a>
+      <a class="sidebar-sub-link" href="#p3-create-ui">P3: Create minimal UI (Qt6)</a>
+      <a class="sidebar-sub-link" href="#p4-wire-gui">P4: Wire GUI mode</a>
+      <a class="sidebar-sub-link" href="#p5-progress-sidebar">P5: Progress sidebar views</a>
+      <a class="sidebar-sub-link" href="#p6-boundaries">P6: What must remain true</a>
+      <a class="sidebar-sub-link" href="#p7-test-scenario">P7: Test scenario</a>
+      <a class="sidebar-sub-link" href="#p8-why-matters">P8: Why this matters</a>
+      <a class="sidebar-sub-link" href="#p9-optional-qt6">P9: Optional Qt6 enhancements</a>
+      <a class="sidebar-sub-link" href="#p10-teaches">P10: What this teaches</a>
+      <a class="sidebar-sub-link" href="#p11-checkpoint">P11: Checkpoint and next</a>
+    </div>
     <a href="appendix-a-multiple-skills.html">Appendix A - Multiple skills</a>
     <a href="appendix-b-skill-router.html">Appendix B - Skill router code</a>
     <a href="appendix-c-bounded-routing.html">Appendix C - Bounded routing</a>
@@ -33,7 +47,50 @@
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">L5</span> Concept before coding</h3>
+        <h3><span class="marker">MAP</span> Lesson map</h3>
+        <p>Use this map first, then go section by section.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li><a class="map-link" href="#p1-outcomes">P1: What you will learn in this lesson.</a></li>
+            <li><a class="map-link" href="#p2-concept">P2: Concept before coding.</a></li>
+            <li><a class="map-link" href="#p3-create-ui">P3: Create a minimal UI file (Qt6).</a></li>
+            <li><a class="map-link" href="#p4-wire-gui">P4: Wire GUI mode from main.py.</a></li>
+            <li><a class="map-link" href="#p5-progress-sidebar">P5: Progress sidebar with selectable views.</a></li>
+            <li><a class="map-link" href="#p6-boundaries">P6: What must remain true.</a></li>
+            <li><a class="map-link" href="#p7-test-scenario">P7: Test scenario.</a></li>
+            <li><a class="map-link" href="#p8-why-matters">P8: Why this matters.</a></li>
+            <li><a class="map-link" href="#p9-optional-qt6">P9: Optional Qt6 enhancements.</a></li>
+            <li><a class="map-link" href="#p10-teaches">P10: What this teaches.</a></li>
+            <li><a class="map-link" href="#p11-checkpoint">P11: Checkpoint and next.</a></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p1-outcomes"><span class="marker">P1</span> What you will learn in this lesson</h3>
+        <p>These outcomes define done for the UI boundary stage.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>By the end of this page, you should be clear on:</h4>
+          <ul>
+            <li>Why UI must remain a boundary and not a logic center.</li>
+            <li>How to build a Qt6 UI that calls the same backend used by CLI.</li>
+            <li>How to add progress instrumentation for debugging execution flow.</li>
+            <li>How to verify behavior without inspecting implementation details.</li>
+            <li>Which backend files must stay unchanged and why.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p2-concept"><span class="marker">P2</span> Concept before coding</h3>
         <p>UI collects input and renders output. Nothing more.</p>
       </div>
       <div class="card-body">
@@ -57,7 +114,7 @@
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">L5</span> Create a minimal UI file (Qt6)</h3>
+        <h3 id="p3-create-ui"><span class="marker">P3</span> Create a minimal UI file (Qt6)</h3>
         <p>Use a professional UI framework while keeping boundaries clean.</p>
       </div>
       <div class="card-body">
@@ -102,7 +159,7 @@ Add comments explaining separation of concerns.</pre>
 
     <section class="card">
       <div class="card-head">
-        <h3><span class="marker">L5</span> Wire GUI mode from main.py</h3>
+        <h3 id="p4-wire-gui"><span class="marker">P4</span> Wire GUI mode from main.py</h3>
         <p>CLI and GUI should share backend paths.</p>
       </div>
       <div class="card-body">
@@ -119,7 +176,7 @@ Add comments explaining separation of concerns.</pre>
 Add comments explaining why CLI and GUI share the same backend.
 
 Optional:
-Replace Tkinter UI with PySide6 version.
+Keep PySide6 (Qt6) and add small UX improvements (layout polish, clearer status text, keyboard submit).
 Keep identical backend interface.
 Do not modify agent, MCP, or storage.</pre>
           </article>
@@ -132,6 +189,179 @@ Do not modify agent, MCP, or storage.</pre>
             </ul>
           </article>
         </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p5-progress-sidebar"><span class="marker">P5</span> Add progress sidebar with selectable view modes</h3>
+        <p>Primary reason: make agent execution flow visible so debugging is fast and reliable.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <h4>Why this section exists</h4>
+          <p>
+            This section exists to help you debug the agent execution flow step by step.
+            The sidebar surfaces runtime progress events and lets you inspect them in table and tree views,
+            without changing backend ownership.
+          </p>
+        </div>
+        <div class="grid-2">
+          <article class="prompt-box">
+            <div class="box-title">
+              <span>Prompt to paste into Codex</span>
+              <button class="copy-btn" data-copy-target="l5-prompt-progress">Copy</button>
+            </div>
+            <pre id="l5-prompt-progress" class="code">Extend the PySide6 UI to include an "Agent Progress" sidebar panel.
+
+Requirements:
+- Keep backend interface unchanged (main.py, agent loop, MCP, storage responsibilities stay the same).
+- The sidebar must support selectable view modes:
+  1) Table view
+  2) Tree view
+- Add a clear mode selector (tabs, segmented buttons, or combo box).
+
+Table view requirements:
+- Render one row per progress event.
+- Include columns: Time, Type, Name, Details.
+- Apply color classification by event type (for example: step_start, tool_called, tool_result, skill_route, skill_used, validation, stop, error).
+- Keep text readable and aligned.
+
+Tree view requirements:
+- Show hierarchical structure (for example: run -> step -> events).
+- Support expand/collapse per node.
+- Add Expand all and Collapse all controls.
+
+Behavior requirements:
+- Live updates while the agent is running.
+- Switching view mode must not lose data.
+- No OpenAI logic in UI.
+- No tool execution logic in UI.
+- No direct storage writes in UI.
+
+Add comments explaining separation of concerns and why this is UI instrumentation only.</pre>
+          </article>
+          <article class="task-box">
+            <div class="box-title"><span>Student task after generation</span></div>
+            <ul class="task-list">
+              <li>Run <code>python main.py --gui</code> and submit a goal that triggers multiple events.</li>
+              <li>Open the Agent Progress sidebar and confirm events appear live while the run is in progress.</li>
+              <li>Switch to Table view and confirm rows are color-classified by event type.</li>
+              <li>Switch to Tree view and confirm nodes can be expanded and collapsed.</li>
+              <li>Use Expand all / Collapse all and confirm both controls work correctly.</li>
+              <li>Switch between Table and Tree several times and confirm no events disappear.</li>
+            </ul>
+          </article>
+        </div>
+        <div class="note">
+          <h4>Expected output after this stage</h4>
+          <ul>
+            <li>GUI includes a right-side Agent Progress panel.</li>
+            <li>The same event stream is viewable as Table and Tree.</li>
+            <li>Color classification improves scan speed in table mode.</li>
+            <li>Tree mode supports collapse/expand for fast structural understanding.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p6-boundaries"><span class="marker">P6</span> What must remain true</h3>
+        <p>If these boundaries break, architecture leaked.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li><code>agent.py</code> remains the control loop owner.</li>
+            <li><code>mcp_server.py</code> and <code>mcp_client.py</code> remain execution boundary components.</li>
+            <li><code>storage.py</code> remains the persistence owner.</li>
+            <li><code>skills/</code> remains reasoning-only content.</li>
+            <li>UI must not introduce backend responsibility shifts.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p7-test-scenario"><span class="marker">P7</span> Test scenario</h3>
+        <p>Validate that GUI and CLI hit the same backend behavior.</p>
+      </div>
+      <div class="card-body">
+        <div class="task-box">
+          <div class="box-title"><span>Behavior checks</span></div>
+          <ol class="task-list">
+            <li>Run CLI: <code>python main.py --goal "Add buy milk"</code>.</li>
+            <li>Run GUI: <code>python main.py --gui</code>.</li>
+            <li>Submit the same goal in GUI and compare result behavior with CLI.</li>
+            <li>Confirm progress sidebar updates while the goal is running.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p8-why-matters"><span class="marker">P8</span> Why this matters</h3>
+        <p>This is architecture discipline, not cosmetic UI work.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li>UI should improve usability and observability, not own runtime logic.</li>
+            <li>Progress instrumentation reduces debugging time and clarifies failures.</li>
+            <li>Stable boundaries let you replace UI technology without rewriting core behavior.</li>
+          </ul>
+          <p>
+            We exclude deeper product-grade concerns here to keep the lesson focused on boundary correctness.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p9-optional-qt6"><span class="marker">P9</span> Optional Qt6 enhancements</h3>
+        <p>Polish UX while preserving architecture.</p>
+      </div>
+      <div class="card-body">
+        <article class="prompt-box">
+          <div class="box-title">
+            <span>Prompt to paste into Codex</span>
+            <button class="copy-btn" data-copy-target="l5-prompt-qt6-polish">Copy</button>
+          </div>
+          <pre id="l5-prompt-qt6-polish" class="code">Keep PySide6 (Qt6) and add small UX improvements (layout polish, clearer status text, keyboard submit).
+Keep identical backend interface.
+Do not modify agent, MCP, or storage.</pre>
+        </article>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p10-teaches"><span class="marker">P10</span> What this teaches</h3>
+        <p>Core learning outcomes from this lesson.</p>
+      </div>
+      <div class="card-body">
+        <div class="note">
+          <ul>
+            <li>UI is a boundary layer.</li>
+            <li>The agent is a control system.</li>
+            <li>MCP is an execution boundary.</li>
+            <li>Skills shape reasoning, not execution.</li>
+            <li>Storage owns persisted state.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h3 id="p11-checkpoint"><span class="marker">P11</span> Checkpoint and next</h3>
+        <p>Quick reflection before moving to appendices.</p>
+      </div>
+      <div class="card-body">
         <div class="checkpoint">
           <h4>Checkpoint</h4>
           <ol class="qa">
@@ -147,6 +377,13 @@ Do not modify agent, MCP, or storage.</pre>
               <div class="answer-row">
                 <button class="reveal-btn" data-answer-target="l5-a2">Reveal answer</button>
                 <span id="l5-a2" class="answer">Yes, if backend boundaries are clean.</span>
+              </div>
+            </li>
+            <li>
+              Why is the progress sidebar important?
+              <div class="answer-row">
+                <button class="reveal-btn" data-answer-target="l5-a3">Reveal answer</button>
+                <span id="l5-a3" class="answer">It makes execution flow observable, so debugging tool calls and stop conditions is much faster.</span>
               </div>
             </li>
           </ol>
