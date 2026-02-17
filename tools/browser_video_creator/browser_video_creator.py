@@ -21,13 +21,14 @@ from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
-from typing import Iterable
+from typing import Callable, Iterable
 from urllib.parse import urljoin
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SITE_DIR = PROJECT_ROOT / "Lessons" / "tutorial_site"
 DEFAULT_MEDIA_DIR = DEFAULT_SITE_DIR / "media"
+DEFAULT_SOUND_PREVIEW_DIR = DEFAULT_MEDIA_DIR / "sound-previews"
 ENCODE_PROFILES: dict[str, dict[str, str]] = {
     "draft": {
         "video_preset": "veryfast",
@@ -214,6 +215,18 @@ def tool_schema() -> dict:
                 "default": False,
                 "description": "Print schema JSON and exit.",
             },
+            "export-sound-previews": {
+                "type": "boolean",
+                "required": False,
+                "default": False,
+                "description": "Export standalone WAV samples for each generated sound type and exit.",
+            },
+            "sound-preview-dir": {
+                "type": "string",
+                "required": False,
+                "default": "Lessons/tutorial_site/media/sound-previews",
+                "description": "Directory where sound preview WAV files are written.",
+            },
         },
     }
 
@@ -267,6 +280,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--pre-click-delay-seconds", type=float, default=1.0)
     parser.add_argument("--ffmpeg-path", default="")
     parser.add_argument("--print-schema", action="store_true")
+    parser.add_argument("--export-sound-previews", action="store_true")
+    parser.add_argument("--sound-preview-dir", default=str(DEFAULT_SOUND_PREVIEW_DIR))
     return parser.parse_args(argv)
 
 
@@ -538,6 +553,7 @@ def synthesize_interaction_audio(
 
     click_events = [event for event in interaction_events if str(event.get("kind", "")) == "click"]
     scroll_events = [event for event in interaction_events if str(event.get("kind", "")) == "scroll"]
+    scroll_tick_events = [event for event in interaction_events if str(event.get("kind", "")) == "scroll_tick"]
 
     for index, event in enumerate(click_events):
         add_burst(
@@ -552,38 +568,52 @@ def synthesize_interaction_audio(
             noise_mix=0.16,
         )
 
-    scroll_tick_index = 0
-    for event in scroll_events:
-        start_time = max(float(event.get("t", 0.0)), 0.0)
-        duration = max(float(event.get("duration", 0.0)), 0.0)
-        if duration <= 0.0:
-            continue
-        step_count = max(int(event.get("step_count", 0)), 0)
-        tick_times: list[float] = []
-        if step_count > 1:
-            max_ticks = 18
-            stride = max(step_count // max_ticks, 1)
-            for step_idx in range(0, step_count, stride):
-                progress = step_idx / float(step_count - 1)
-                tick_times.append(start_time + duration * progress)
-        else:
-            tick_gap = 0.135
-            tick_count = max(int(duration / tick_gap), 1)
-            for tick in range(tick_count):
-                tick_times.append(start_time + min(tick * tick_gap, duration))
-        for tick_time in tick_times:
-            add_burst(
-                tick_time,
-                event_index=scroll_tick_index,
-                duration=0.048,
-                amplitude=0.028,
-                decay=62.0,
-                freq_a=900.0 + float((scroll_tick_index % 4) * 22),
-                freq_b=1240.0 + float((scroll_tick_index % 3) * 31),
-                tonal_mix=0.56,
-                noise_mix=0.22,
-            )
-            scroll_tick_index += 1
+    scroll_tick_times: list[float] = []
+    if scroll_tick_events:
+        scroll_tick_times = sorted(max(float(event.get("t", 0.0)), 0.0) for event in scroll_tick_events)
+    else:
+        # Backward-compatible fallback for older interaction timelines.
+        for event in scroll_events:
+            start_time = max(float(event.get("t", 0.0)), 0.0)
+            duration = max(float(event.get("duration", 0.0)), 0.0)
+            if duration <= 0.0:
+                continue
+            step_count = max(int(event.get("step_count", 0)), 0)
+            if step_count > 1:
+                max_ticks = 18
+                stride = max(int(math.ceil(step_count / float(max_ticks))), 1)
+                for step_idx in range(0, step_count, stride):
+                    progress = step_idx / float(step_count)
+                    scroll_tick_times.append(start_time + duration * progress)
+            elif step_count == 1:
+                scroll_tick_times.append(start_time)
+            else:
+                tick_gap = 0.135
+                tick_count = max(int(duration / tick_gap), 1)
+                for tick in range(tick_count):
+                    scroll_tick_times.append(start_time + min(tick * tick_gap, duration))
+
+    filtered_tick_times: list[float] = []
+    min_tick_gap = 0.14
+    for tick_time in scroll_tick_times:
+        if not filtered_tick_times or (tick_time - filtered_tick_times[-1]) >= min_tick_gap:
+            filtered_tick_times.append(tick_time)
+
+    for scroll_tick_index, tick_time in enumerate(filtered_tick_times):
+        is_even = (scroll_tick_index % 2) == 0
+        freq_a = 1840.0 if is_even else 1360.0
+        freq_b = 1110.0 if is_even else 790.0
+        add_burst(
+            tick_time,
+            event_index=scroll_tick_index,
+            duration=0.025,
+            amplitude=0.042 if is_even else 0.037,
+            decay=132.0,
+            freq_a=freq_a,
+            freq_b=freq_b,
+            tonal_mix=0.93,
+            noise_mix=0.0,
+        )
 
     if include_background_music:
         # Procedural upbeat background bed (no external assets).
@@ -645,6 +675,51 @@ def synthesize_interaction_audio(
         wav.setsampwidth(2)
         wav.setframerate(sample_rate)
         wav.writeframes(pcm_samples.tobytes())
+
+
+def export_sound_previews(preview_dir: Path) -> list[Path]:
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    generated: list[Path] = []
+
+    click_preview = preview_dir / "browser-click.wav"
+    click_events = [{"kind": "click", "t": 0.35}]
+    synthesize_interaction_audio(
+        click_preview,
+        duration_seconds=1.2,
+        interaction_events=click_events,
+        include_background_music=False,
+    )
+    generated.append(click_preview)
+
+    scroll_preview = preview_dir / "browser-scroll.wav"
+    scroll_start = 0.35
+    scroll_duration = 1.65
+    step_count = 20
+    tick_stride = max(int(math.ceil(max(step_count, 1) / 14.0)), 1)
+    scroll_tick_events = [
+        {"kind": "scroll_tick", "t": scroll_start + (scroll_duration * (index / float(step_count)))}
+        for index in range(step_count)
+        if (index % tick_stride == 0) or (index == step_count - 1)
+    ]
+    scroll_events = [{"kind": "scroll", "t": scroll_start, "duration": scroll_duration, "step_count": step_count}]
+    synthesize_interaction_audio(
+        scroll_preview,
+        duration_seconds=2.4,
+        interaction_events=scroll_events + scroll_tick_events,
+        include_background_music=False,
+    )
+    generated.append(scroll_preview)
+
+    music_preview = preview_dir / "browser-background-music.wav"
+    synthesize_interaction_audio(
+        music_preview,
+        duration_seconds=8.0,
+        interaction_events=[],
+        include_background_music=True,
+    )
+    generated.append(music_preview)
+
+    return generated
 
 
 def mux_audio_into_mp4(ffmpeg_exe: str, video_path: Path, audio_path: Path, *, audio_bitrate: str) -> None:
@@ -942,13 +1017,21 @@ def launch_browser(playwright, browser: str, browser_path: str, headless: bool):
         ) from exc
 
 
-def smooth_scroll(page, pixels: int, duration_seconds: float, steps: int) -> None:
+def smooth_scroll(
+    page,
+    pixels: int,
+    duration_seconds: float,
+    steps: int,
+    on_step: Callable[[int, int], None] | None = None,
+) -> None:
     if steps <= 0:
         return
     step_pixels = pixels / steps
     delay = max(duration_seconds / steps, 0.01)
-    for _ in range(steps):
+    for step_idx in range(steps):
         page.evaluate("(value) => window.scrollBy(0, value)", step_pixels)
+        if on_step is not None:
+            on_step(step_idx, steps)
         page.wait_for_timeout(int(delay * 1000))
 
 
@@ -1103,7 +1186,7 @@ def ensure_mouse_overlay(page) -> None:
             cursor.style.zIndex = "2147483647";
             cursor.style.boxShadow = "0 0 0 1px rgba(255,230,0,0.65)";
             cursor.style.transform = "translate(48px, 48px)";
-            cursor.style.transition = "transform 200ms linear";
+            cursor.style.transition = "none";
             document.body.appendChild(cursor);
 
             const ring = document.createElement("div");
@@ -1121,7 +1204,9 @@ def ensure_mouse_overlay(page) -> None:
             ring.style.transition = "opacity 120ms linear, transform 320ms ease-out";
             document.body.appendChild(ring);
 
-            window.__demoMouseMove = (x, y) => {
+            window.__demoMouseMove = (x, y, durationMs = 0) => {
+                const safeDuration = Number.isFinite(durationMs) ? Math.max(durationMs, 0) : 0;
+                cursor.style.transition = safeDuration > 0 ? `transform ${safeDuration}ms linear` : "none";
                 cursor.style.transform = `translate(${x}px, ${y}px)`;
                 ring.style.transform = `translate(${x - 17}px, ${y - 17}px) scale(0.74)`;
             };
@@ -1138,31 +1223,85 @@ def ensure_mouse_overlay(page) -> None:
     )
 
 
-def move_mouse_to_selector(
-    page, selector: str, timeout_ms: int, anchor: str = "center"
-) -> tuple[float, float] | None:
-    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+def resolve_selector_target(
+    page,
+    *,
+    selector: str,
+    timeout_ms: int,
+    anchor: str = "center",
+) -> dict[str, float | int] | None:
+    deadline = time.monotonic() + max(timeout_ms, 0) / 1000.0
+    while True:
+        target = page.evaluate(
+            """([sel, anchorType]) => {
+                const nodes = Array.from(document.querySelectorAll(sel));
+                for (let i = 0; i < nodes.length; i += 1) {
+                    const node = nodes[i];
+                    if (!(node instanceof Element)) {
+                        continue;
+                    }
+                    const style = window.getComputedStyle(node);
+                    if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") === 0) {
+                        continue;
+                    }
+                    const rect = node.getBoundingClientRect();
+                    if (rect.width < 2 || rect.height < 2) {
+                        continue;
+                    }
+                    let x = rect.left + rect.width / 2.0;
+                    let y = rect.top + rect.height / 2.0;
+                    if (anchorType === "edge") {
+                        const offsetX = Math.min(Math.max(rect.width * 0.20, 10.0), Math.max(rect.width - 10.0, 4.0));
+                        const offsetY = Math.min(Math.max(rect.height * 0.18, 10.0), Math.max(rect.height - 10.0, 4.0));
+                        x = rect.left + offsetX;
+                        y = rect.top + offsetY;
+                    }
+                    const maxX = Math.max(window.innerWidth - 26.0, 4.0);
+                    const maxY = Math.max(window.innerHeight - 26.0, 4.0);
+                    x = Math.max(4.0, Math.min(x, maxX));
+                    y = Math.max(4.0, Math.min(y, maxY));
+                    return { x, y, index: i };
+                }
+                return null;
+            }""",
+            [selector, anchor],
+        )
+        if target is not None:
+            return {
+                "x": float(target["x"]),
+                "y": float(target["y"]),
+                "index": int(target["index"]),
+            }
+        if time.monotonic() >= deadline:
+            return None
+        page.wait_for_timeout(40)
 
-    try:
-        box = page.locator(selector).first.bounding_box(timeout=timeout_ms)
-    except PlaywrightTimeoutError:
-        return None
-    if box is None:
-        return None
-    base_x = float(box["x"])
-    base_y = float(box["y"])
-    width = float(box["width"])
-    height = float(box["height"])
-    if anchor == "edge":
-        offset_x = min(max(width * 0.20, 10.0), max(width - 10.0, 4.0))
-        offset_y = min(max(height * 0.18, 10.0), max(height - 10.0, 4.0))
-        center_x = base_x + offset_x
-        center_y = base_y + offset_y
-    else:
-        center_x = base_x + width / 2.0
-        center_y = base_y + height / 2.0
-    page.evaluate("([x, y]) => window.__demoMouseMove?.(x, y)", [center_x, center_y])
-    return center_x, center_y
+
+def move_mouse_overlay_constant_velocity(
+    page,
+    *,
+    start_x: float,
+    start_y: float,
+    end_x: float,
+    end_y: float,
+    speed_px_per_second: float = 1150.0,
+) -> None:
+    dx = end_x - start_x
+    dy = end_y - start_y
+    distance = math.hypot(dx, dy)
+    if distance <= 0.5:
+        page.evaluate("([x, y]) => window.__demoMouseMove?.(x, y, 0)", [end_x, end_y])
+        return
+    duration_seconds = distance / max(speed_px_per_second, 1.0)
+    step_seconds = 1.0 / 30.0
+    steps = max(int(math.ceil(duration_seconds / step_seconds)), 1)
+    for step in range(1, steps + 1):
+        progress = step / float(steps)
+        x = start_x + dx * progress
+        y = start_y + dy * progress
+        page.evaluate("([mx, my]) => window.__demoMouseMove?.(mx, my, 0)", [x, y])
+        if step < steps:
+            page.wait_for_timeout(max(int(round((duration_seconds / steps) * 1000.0)), 1))
 
 
 def focus_selector(
@@ -1213,6 +1352,71 @@ def focus_selector(
     )
 
 
+def ensure_selector_fully_visible(
+    page,
+    *,
+    selector: str,
+    timeout_ms: int,
+    margin: float = 18.0,
+) -> bool:
+    deadline = time.monotonic() + max(timeout_ms, 0) / 1000.0
+    while True:
+        visibility = page.evaluate(
+            """([sel, marginPx]) => {
+                const nodes = Array.from(document.querySelectorAll(sel));
+                let target = null;
+                for (const node of nodes) {
+                    if (!(node instanceof Element)) {
+                        continue;
+                    }
+                    const style = window.getComputedStyle(node);
+                    if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") === 0) {
+                        continue;
+                    }
+                    const rect = node.getBoundingClientRect();
+                    if (rect.width < 2 || rect.height < 2) {
+                        continue;
+                    }
+                    target = rect;
+                    break;
+                }
+                if (!target) {
+                    return null;
+                }
+
+                const topBound = marginPx;
+                const bottomBound = window.innerHeight - marginPx;
+                const fullyVisible = target.top >= topBound && target.bottom <= bottomBound;
+                if (fullyVisible) {
+                    return { fully_visible: true, scroll_delta: 0.0 };
+                }
+
+                let scrollDelta = 0.0;
+                if (target.top < topBound) {
+                    scrollDelta = target.top - topBound - 8.0;
+                } else if (target.bottom > bottomBound) {
+                    scrollDelta = target.bottom - bottomBound + 8.0;
+                }
+                return { fully_visible: false, scroll_delta: scrollDelta };
+            }""",
+            [selector, float(margin)],
+        )
+        if visibility is None:
+            if time.monotonic() >= deadline:
+                return False
+            page.wait_for_timeout(40)
+            continue
+        if bool(visibility.get("fully_visible", False)):
+            return True
+        scroll_delta = float(visibility.get("scroll_delta", 0.0))
+        if abs(scroll_delta) < 1.0:
+            return True
+        page.evaluate("(value) => window.scrollBy(0, value)", scroll_delta)
+        page.wait_for_timeout(45)
+        if time.monotonic() >= deadline:
+            return False
+
+
 def run_actions(
     page,
     base_url: str,
@@ -1226,7 +1430,11 @@ def run_actions(
 ) -> None:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
+    last_cursor_position: tuple[float, float] | None = None
+
     def track_cursor(x: float, y: float, kind: str = "move") -> None:
+        nonlocal last_cursor_position
+        last_cursor_position = (float(x), float(y))
         if cursor_events is None:
             return
         if time_origin is None:
@@ -1235,10 +1443,20 @@ def run_actions(
             timestamp = max(time.monotonic() - time_origin, 0.0)
         cursor_events.append({"t": timestamp, "x": float(x), "y": float(y), "kind": kind})
 
-    def track_interaction(kind: str, duration: float | None = None, step_count: int | None = None) -> None:
+    def track_interaction(
+        kind: str,
+        duration: float | None = None,
+        step_count: int | None = None,
+        event_time: float | None = None,
+    ) -> None:
         if interaction_events is None:
             return
-        if time_origin is None:
+        if event_time is not None:
+            if time_origin is None:
+                timestamp = max(event_time, 0.0)
+            else:
+                timestamp = max(event_time - time_origin, 0.0)
+        elif time_origin is None:
             timestamp = 0.0
         else:
             timestamp = max(time.monotonic() - time_origin, 0.0)
@@ -1249,6 +1467,17 @@ def run_actions(
             event["step_count"] = max(int(step_count), 0)
         interaction_events.append(event)
 
+    def move_cursor_to(target_x: float, target_y: float) -> None:
+        start_x, start_y = last_cursor_position if last_cursor_position is not None else (56.0, 56.0)
+        move_mouse_overlay_constant_velocity(
+            page,
+            start_x=float(start_x),
+            start_y=float(start_y),
+            end_x=float(target_x),
+            end_y=float(target_y),
+        )
+        track_cursor(float(target_x), float(target_y), kind="move")
+
     for action in actions:
         action_type = action["type"]
         if action_type == "goto":
@@ -1256,8 +1485,9 @@ def run_actions(
             page.goto(urljoin(base_url, target), wait_until="networkidle")
             if show_mouse_overlay:
                 ensure_mouse_overlay(page)
-                page.evaluate("() => window.__demoMouseMove?.(56, 56)")
-                track_cursor(56.0, 56.0, kind="move")
+                restore_x, restore_y = last_cursor_position if last_cursor_position is not None else (56.0, 56.0)
+                page.evaluate("([x, y]) => window.__demoMouseMove?.(x, y, 0)", [restore_x, restore_y])
+                track_cursor(restore_x, restore_y, kind="move")
             wait_ms = int(action.get("wait_seconds", 0) * 1000)
             if wait_ms > 0:
                 page.wait_for_timeout(wait_ms)
@@ -1271,11 +1501,21 @@ def run_actions(
             scroll_duration_seconds = float(action["duration_seconds"])
             scroll_steps = int(action["steps"])
             track_interaction("scroll", duration=scroll_duration_seconds, step_count=scroll_steps)
+            max_tick_events = 12
+            tick_stride = max(int(math.ceil(max(scroll_steps, 1) / float(max_tick_events))), 1)
+
+            def on_scroll_step(step_index: int, total_steps: int) -> None:
+                should_emit = (step_index % tick_stride == 0) or (step_index == total_steps - 1)
+                if not should_emit:
+                    return
+                track_interaction("scroll_tick", event_time=time.monotonic())
+
             smooth_scroll(
                 page,
                 pixels=int(action["pixels"]),
                 duration_seconds=scroll_duration_seconds,
                 steps=scroll_steps,
+                on_step=on_scroll_step,
             )
             continue
 
@@ -1288,6 +1528,12 @@ def run_actions(
             dim_opacity = float(action.get("dim_opacity", 0.18))
             auto_scroll = bool(action.get("auto_scroll", True))
             ensure_focus_overlay(page)
+            visible = ensure_selector_fully_visible(page, selector=selector, timeout_ms=timeout_ms)
+            if not visible and optional:
+                page.evaluate("() => window.__demoFocusOff?.()")
+                continue
+            if not visible:
+                raise RuntimeError(f"Could not bring selector into full view: {selector}")
             has_target = focus_selector(
                 page,
                 selector=selector,
@@ -1305,9 +1551,14 @@ def run_actions(
 
             if show_mouse_overlay:
                 ensure_mouse_overlay(page)
-                target_pos = move_mouse_to_selector(page, selector=selector, timeout_ms=timeout_ms, anchor="edge")
-                if target_pos is not None:
-                    track_cursor(target_pos[0], target_pos[1], kind="move")
+                target_info = resolve_selector_target(
+                    page,
+                    selector=selector,
+                    timeout_ms=timeout_ms,
+                    anchor="edge",
+                )
+                if target_info is not None:
+                    move_cursor_to(float(target_info["x"]), float(target_info["y"]))
 
             wait_ms = int(float(action.get("wait_seconds", 0.8)) * 1000)
             if wait_ms > 0:
@@ -1322,25 +1573,61 @@ def run_actions(
             selector = action["selector"]
             optional = bool(action.get("optional", False))
             timeout_ms = int(action.get("timeout_ms", 2000))
-            has_target = True
-            target_pos: tuple[float, float] | None = None
+            ensure_selector_fully_visible(page, selector=selector, timeout_ms=timeout_ms)
+            target_info = resolve_selector_target(
+                page,
+                selector=selector,
+                timeout_ms=timeout_ms,
+                anchor="center",
+            )
+            if target_info is None and optional:
+                continue
+            if target_info is None:
+                raise RuntimeError(f"Could not resolve click target: {selector}")
+
             if show_mouse_overlay:
                 ensure_mouse_overlay(page)
-                target_pos = move_mouse_to_selector(page, selector=selector, timeout_ms=timeout_ms)
-                has_target = target_pos is not None
-                if target_pos is not None:
-                    track_cursor(target_pos[0], target_pos[1], kind="move")
-            if not has_target and optional:
-                continue
+                move_cursor_to(float(target_info["x"]), float(target_info["y"]))
+
             delay_ms = int(max(pre_click_delay_seconds, 0.0) * 1000)
             if delay_ms > 0:
                 page.wait_for_timeout(delay_ms)
+
+            # Re-resolve right before click to keep click marker and action synchronized.
+            target_info = resolve_selector_target(
+                page,
+                selector=selector,
+                timeout_ms=timeout_ms,
+                anchor="center",
+            )
+            if target_info is None and optional:
+                continue
+            if target_info is None:
+                raise RuntimeError(f"Could not resolve click target at click time: {selector}")
+            if show_mouse_overlay:
+                move_cursor_to(float(target_info["x"]), float(target_info["y"]))
+
+            before_click_url = page.url
             try:
-                if show_mouse_overlay and target_pos is not None:
+                if show_mouse_overlay:
                     page.evaluate("() => window.__demoMouseClick?.()")
-                    track_cursor(target_pos[0], target_pos[1], kind="click")
+                    track_cursor(float(target_info["x"]), float(target_info["y"]), kind="click")
                 track_interaction("click")
-                page.click(selector, timeout=timeout_ms)
+                click_index = int(target_info["index"])
+                page.locator(selector).nth(click_index).click(timeout=timeout_ms)
+                if show_mouse_overlay and page.url != before_click_url:
+                    try:
+                        page.wait_for_load_state("domcontentloaded", timeout=max(timeout_ms, 1200))
+                    except PlaywrightTimeoutError:
+                        pass
+                    ensure_mouse_overlay(page)
+                    restore_x, restore_y = (
+                        (float(target_info["x"]), float(target_info["y"]))
+                        if target_info is not None
+                        else (last_cursor_position if last_cursor_position is not None else (56.0, 56.0))
+                    )
+                    page.evaluate("([x, y]) => window.__demoMouseMove?.(x, y, 0)", [restore_x, restore_y])
+                    track_cursor(restore_x, restore_y, kind="move")
             except PlaywrightTimeoutError:
                 if not optional:
                     raise
@@ -1914,6 +2201,13 @@ def main(argv: list[str]) -> int:
     args = parse_args(argv)
     if args.print_schema:
         print(json.dumps(tool_schema(), indent=2))
+        return 0
+    if args.export_sound_previews:
+        outputs = export_sound_previews(Path(args.sound_preview_dir).resolve())
+        print()
+        print("Generated sound previews:")
+        for output in outputs:
+            print(f" - {output} ({output.stat().st_size:,} bytes)")
         return 0
 
     if args.mode == "site-videos":

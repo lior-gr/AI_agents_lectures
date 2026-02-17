@@ -19,6 +19,7 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = PROJECT_ROOT / "Lessons" / "tutorial_site" / "media" / "tutorial-outcome.mp4"
+DEFAULT_SOUND_PREVIEW_DIR = PROJECT_ROOT / "Lessons" / "tutorial_site" / "media" / "sound-previews"
 TASK_MANAGER_DIR = PROJECT_ROOT / "task_manager"
 ENCODE_PROFILES: dict[str, dict[str, str]] = {
     "draft": {
@@ -60,6 +61,11 @@ def tool_schema() -> dict[str, Any]:
             "ffmpeg-path": {"type": "string", "default": ""},
             "max-demo-seconds": {"type": "integer", "default": 240, "minimum": 30},
             "print-schema": {"type": "boolean", "default": False},
+            "export-sound-previews": {"type": "boolean", "default": False},
+            "sound-preview-dir": {
+                "type": "string",
+                "default": "Lessons/tutorial_site/media/sound-previews",
+            },
         },
     }
 
@@ -101,6 +107,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--ffmpeg-path", default="")
     parser.add_argument("--max-demo-seconds", type=lambda v: min_int(v, 30, "max-demo-seconds"), default=240)
     parser.add_argument("--print-schema", action="store_true")
+    parser.add_argument("--export-sound-previews", action="store_true")
+    parser.add_argument("--sound-preview-dir", default=str(DEFAULT_SOUND_PREVIEW_DIR))
     return parser.parse_args(argv)
 
 
@@ -825,6 +833,46 @@ def synthesize_interaction_audio(
         wav.writeframes(pcm_samples.tobytes())
 
 
+def export_sound_previews(preview_dir: Path) -> list[Path]:
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    generated: list[Path] = []
+
+    typing_preview = preview_dir / "gui-typing.wav"
+    typing_times = [0.10 + (index * 0.09) for index in range(18)]
+    synthesize_interaction_audio(
+        typing_preview,
+        duration_seconds=2.4,
+        keypress_times_seconds=typing_times,
+        log_event_times_seconds=[],
+        click_times_seconds=[],
+    )
+    generated.append(typing_preview)
+
+    logger_preview = preview_dir / "gui-logger.wav"
+    logger_times = [0.25 + (index * 0.24) for index in range(8)]
+    synthesize_interaction_audio(
+        logger_preview,
+        duration_seconds=2.6,
+        keypress_times_seconds=[],
+        log_event_times_seconds=logger_times,
+        click_times_seconds=[],
+    )
+    generated.append(logger_preview)
+
+    click_preview = preview_dir / "gui-click.wav"
+    click_times = [0.45, 1.25, 1.95]
+    synthesize_interaction_audio(
+        click_preview,
+        duration_seconds=2.4,
+        keypress_times_seconds=[],
+        log_event_times_seconds=[],
+        click_times_seconds=click_times,
+    )
+    generated.append(click_preview)
+
+    return generated
+
+
 def encode_video(
     ffmpeg_exe: str,
     frames_dir: Path,
@@ -956,6 +1004,12 @@ def main(argv: list[str]) -> int:
     args = parse_args(argv)
     if args.print_schema:
         print(json.dumps(tool_schema(), indent=2))
+        return 0
+    if args.export_sound_previews:
+        generated_paths = export_sound_previews(Path(args.sound_preview_dir).resolve())
+        print("Generated GUI sound previews:")
+        for path in generated_paths:
+            print(f" - {path} ({path.stat().st_size:,} bytes)")
         return 0
 
     generated_paths = run_demo(args)
