@@ -306,6 +306,16 @@ def encode_profile_settings(profile_name: str) -> dict[str, str]:
     return settings
 
 
+def describe_focus_target(selector: str) -> tuple[str, bool]:
+    normalized = selector.strip()
+    card_prefix = "section.card:has("
+    if normalized.startswith(card_prefix) and normalized.endswith(")"):
+        inner_selector = normalized[len(card_prefix) : -1].strip()
+        if inner_selector.startswith("#"):
+            return f"the white card containing `{inner_selector}`", True
+    return f"`{normalized}`", False
+
+
 def describe_action(action: dict) -> str:
     action_type = str(action.get("type", "")).strip().lower()
     if action_type == "goto":
@@ -329,7 +339,33 @@ def describe_action(action: dict) -> str:
         wait_seconds = float(action.get("wait_seconds", 0.0))
         optional = bool(action.get("optional", False))
         optional_note = " (optional)" if optional else ""
-        return f"Focus on `{selector}`{optional_note} with spotlight, then hold for {wait_seconds:.1f}s."
+        focus_target_text, full_card_focus = describe_focus_target(selector)
+        if bool(action.get("center_target", True)):
+            if full_card_focus:
+                return (
+                    f"Smooth-scroll to center {focus_target_text}{optional_note}, then spotlight the entire card "
+                    f"and hold for {wait_seconds:.1f}s."
+                )
+            return f"Smooth-scroll to center {focus_target_text}{optional_note}, then spotlight and hold for {wait_seconds:.1f}s."
+        return f"Focus on {focus_target_text}{optional_note} with spotlight, then hold for {wait_seconds:.1f}s."
+    if action_type == "focus_each":
+        selector = str(action.get("selector", ""))
+        wait_seconds = float(action.get("wait_seconds", 0.0))
+        optional = bool(action.get("optional", False))
+        optional_note = " (optional)" if optional else ""
+        return f"For each `{selector}`{optional_note}, smooth-scroll to center it, spotlight it, then hold for {wait_seconds:.1f}s."
+    if action_type == "prompt_task_pairs":
+        prompt_selector = str(action.get("prompt_selector", ".prompt-box"))
+        task_selector = str(action.get("task_selector", ".task-box"))
+        copy_selector = str(action.get("copy_button_selector", ".copy-btn"))
+        prompt_rate = float(action.get("prompt_seconds_per_five_lines", 2.0))
+        copy_hold = float(action.get("copy_hold_seconds", 0.5))
+        task_hold = float(action.get("task_hold_seconds", 2.0))
+        return (
+            f"For each `{prompt_selector}` block: smooth-scroll to center and spotlight prompt "
+            f"(~{prompt_rate:.1f}s per 5 lines), then smoothly move mouse to `{copy_selector}`, click, hold for "
+            f"{copy_hold:.1f}s, and only then move to paired `{task_selector}` and spotlight for {task_hold:.1f}s."
+        )
     return json.dumps(action, ensure_ascii=True)
 
 
@@ -1094,12 +1130,12 @@ def ensure_focus_overlay(page) -> None:
             document.body.appendChild(frame);
 
             window.__demoFocusTarget = null;
-            window.__demoResolveTarget = (selector) => {
+            window.__demoResolveTarget = (selector, options = {}) => {
                 const candidates = Array.from(document.querySelectorAll(selector));
                 if (!candidates.length) {
                     return null;
                 }
-                const visible = candidates.find((node) => {
+                const isVisibleCandidate = (node) => {
                     if (!(node instanceof Element)) {
                         return false;
                     }
@@ -1109,12 +1145,24 @@ def ensure_focus_overlay(page) -> None:
                     }
                     const rect = node.getBoundingClientRect();
                     return rect.width >= 2 && rect.height >= 2;
-                });
+                };
+                const hasMatchIndex = Number.isFinite(options.match_index);
+                if (hasMatchIndex) {
+                    const rawIndex = Number(options.match_index);
+                    const matchIndex = Math.max(0, Math.floor(rawIndex));
+                    if (matchIndex < candidates.length) {
+                        const indexed = candidates[matchIndex];
+                        if (isVisibleCandidate(indexed)) {
+                            return indexed;
+                        }
+                    }
+                }
+                const visible = candidates.find((node) => isVisibleCandidate(node));
                 return visible || candidates[0];
             };
 
             window.__demoFocusOn = (selector, options = {}) => {
-                const target = window.__demoResolveTarget?.(selector);
+                const target = window.__demoResolveTarget?.(selector, options);
                 if (!target) {
                     return false;
                 }
@@ -1229,25 +1277,31 @@ def resolve_selector_target(
     selector: str,
     timeout_ms: int,
     anchor: str = "center",
+    match_index: int | None = None,
 ) -> dict[str, float | int] | None:
     deadline = time.monotonic() + max(timeout_ms, 0) / 1000.0
+    requested_index = int(match_index) if match_index is not None else -1
     while True:
         target = page.evaluate(
-            """([sel, anchorType]) => {
+            """([sel, anchorType, requestedIndex]) => {
                 const nodes = Array.from(document.querySelectorAll(sel));
-                for (let i = 0; i < nodes.length; i += 1) {
-                    const node = nodes[i];
+                const isVisible = (node) => {
                     if (!(node instanceof Element)) {
-                        continue;
+                        return false;
                     }
                     const style = window.getComputedStyle(node);
                     if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") === 0) {
-                        continue;
+                        return false;
                     }
                     const rect = node.getBoundingClientRect();
                     if (rect.width < 2 || rect.height < 2) {
-                        continue;
+                        return false;
                     }
+                    return true;
+                };
+
+                const toTarget = (node, index) => {
+                    const rect = node.getBoundingClientRect();
                     let x = rect.left + rect.width / 2.0;
                     let y = rect.top + rect.height / 2.0;
                     if (anchorType === "edge") {
@@ -1260,11 +1314,26 @@ def resolve_selector_target(
                     const maxY = Math.max(window.innerHeight - 26.0, 4.0);
                     x = Math.max(4.0, Math.min(x, maxX));
                     y = Math.max(4.0, Math.min(y, maxY));
-                    return { x, y, index: i };
+                    return { x, y, index };
+                };
+
+                if (requestedIndex >= 0 && requestedIndex < nodes.length) {
+                    const requestedNode = nodes[requestedIndex];
+                    if (isVisible(requestedNode)) {
+                        return toTarget(requestedNode, requestedIndex);
+                    }
+                }
+
+                for (let i = 0; i < nodes.length; i += 1) {
+                    const node = nodes[i];
+                    if (!isVisible(node)) {
+                        continue;
+                    }
+                    return toTarget(node, i);
                 }
                 return null;
             }""",
-            [selector, anchor],
+            [selector, anchor, requested_index],
         )
         if target is not None:
             return {
@@ -1313,10 +1382,11 @@ def focus_selector(
     zoom: float,
     dim_opacity: float,
     auto_scroll: bool,
+    match_index: int | None = None,
 ) -> bool:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
-    locator = page.locator(selector).first
+    locator = page.locator(selector).nth(int(match_index)) if match_index is not None else page.locator(selector).first
     try:
         locator.wait_for(state="visible", timeout=timeout_ms)
     except PlaywrightTimeoutError:
@@ -1346,6 +1416,7 @@ def focus_selector(
                     "padding": float(padding),
                     "zoom": float(zoom),
                     "dim_opacity": float(dim_opacity),
+                    "match_index": int(match_index) if match_index is not None else None,
                 },
             ],
         )
@@ -1358,27 +1429,44 @@ def ensure_selector_fully_visible(
     selector: str,
     timeout_ms: int,
     margin: float = 18.0,
+    match_index: int | None = None,
 ) -> bool:
     deadline = time.monotonic() + max(timeout_ms, 0) / 1000.0
+    requested_index = int(match_index) if match_index is not None else -1
     while True:
         visibility = page.evaluate(
-            """([sel, marginPx]) => {
+            """([sel, marginPx, requestedIndex]) => {
                 const nodes = Array.from(document.querySelectorAll(sel));
                 let target = null;
-                for (const node of nodes) {
+                const isVisibleNode = (node) => {
                     if (!(node instanceof Element)) {
-                        continue;
+                        return false;
                     }
                     const style = window.getComputedStyle(node);
                     if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") === 0) {
-                        continue;
+                        return false;
                     }
                     const rect = node.getBoundingClientRect();
                     if (rect.width < 2 || rect.height < 2) {
-                        continue;
+                        return false;
                     }
-                    target = rect;
-                    break;
+                    return true;
+                };
+
+                if (requestedIndex >= 0 && requestedIndex < nodes.length) {
+                    const node = nodes[requestedIndex];
+                    if (isVisibleNode(node)) {
+                        target = node.getBoundingClientRect();
+                    }
+                }
+                if (!target) {
+                    for (const node of nodes) {
+                        if (!isVisibleNode(node)) {
+                            continue;
+                        }
+                        target = node.getBoundingClientRect();
+                        break;
+                    }
                 }
                 if (!target) {
                     return null;
@@ -1399,7 +1487,7 @@ def ensure_selector_fully_visible(
                 }
                 return { fully_visible: false, scroll_delta: scrollDelta };
             }""",
-            [selector, float(margin)],
+            [selector, float(margin), requested_index],
         )
         if visibility is None:
             if time.monotonic() >= deadline:
@@ -1411,10 +1499,258 @@ def ensure_selector_fully_visible(
         scroll_delta = float(visibility.get("scroll_delta", 0.0))
         if abs(scroll_delta) < 1.0:
             return True
-        page.evaluate("(value) => window.scrollBy(0, value)", scroll_delta)
+        page.evaluate("(value) => window.scrollBy(0, value)", bounded_scroll_delta(scroll_delta))
         page.wait_for_timeout(45)
         if time.monotonic() >= deadline:
             return False
+
+
+def bounded_scroll_delta(scroll_delta: float, max_step_px: float = 220.0) -> float:
+    if abs(scroll_delta) <= max_step_px:
+        return float(scroll_delta)
+    return max_step_px if scroll_delta > 0 else -max_step_px
+
+
+def center_selector_in_view(
+    page,
+    *,
+    selector: str,
+    timeout_ms: int,
+    match_index: int | None = None,
+    margin: float = 18.0,
+) -> bool:
+    deadline = time.monotonic() + max(timeout_ms, 0) / 1000.0
+    requested_index = int(match_index) if match_index is not None else -1
+    while True:
+        centering = page.evaluate(
+            """([sel, marginPx, requestedIndex]) => {
+                const nodes = Array.from(document.querySelectorAll(sel));
+                let target = null;
+
+                const isVisibleNode = (node) => {
+                    if (!(node instanceof Element)) {
+                        return false;
+                    }
+                    const style = window.getComputedStyle(node);
+                    if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") === 0) {
+                        return false;
+                    }
+                    const rect = node.getBoundingClientRect();
+                    if (rect.width < 2 || rect.height < 2) {
+                        return false;
+                    }
+                    return true;
+                };
+
+                if (requestedIndex >= 0 && requestedIndex < nodes.length) {
+                    const node = nodes[requestedIndex];
+                    if (isVisibleNode(node)) {
+                        target = node.getBoundingClientRect();
+                    }
+                }
+                if (!target) {
+                    for (const node of nodes) {
+                        if (!isVisibleNode(node)) {
+                            continue;
+                        }
+                        target = node.getBoundingClientRect();
+                        break;
+                    }
+                }
+                if (!target) {
+                    return null;
+                }
+
+                const viewportMid = window.innerHeight / 2.0;
+                const targetMid = target.top + (target.height / 2.0);
+                const desiredDelta = targetMid - viewportMid;
+
+                const docHeight = Math.max(
+                    document.documentElement.scrollHeight || 0,
+                    document.body?.scrollHeight || 0
+                );
+                const maxDown = Math.max(docHeight - window.innerHeight - window.scrollY, 0.0);
+                const maxUp = Math.max(window.scrollY, 0.0);
+                let boundedDelta = desiredDelta;
+                if (boundedDelta > maxDown) {
+                    boundedDelta = maxDown;
+                }
+                if (boundedDelta < -maxUp) {
+                    boundedDelta = -maxUp;
+                }
+
+                const topBound = marginPx;
+                const bottomBound = window.innerHeight - marginPx;
+                const fullyVisible = target.top >= topBound && target.bottom <= bottomBound;
+                const nearCentered = Math.abs(desiredDelta) <= 8.0;
+                const cannotScrollFurther = Math.abs(boundedDelta) < 1.0;
+                return {
+                    centered: nearCentered || cannotScrollFurther,
+                    fully_visible: fullyVisible,
+                    scroll_delta: boundedDelta,
+                };
+            }""",
+            [selector, float(margin), requested_index],
+        )
+        if centering is None:
+            if time.monotonic() >= deadline:
+                return False
+            page.wait_for_timeout(40)
+            continue
+        if bool(centering.get("centered", False)) and bool(centering.get("fully_visible", False)):
+            return True
+        scroll_delta = float(centering.get("scroll_delta", 0.0))
+        if abs(scroll_delta) < 1.0:
+            return bool(centering.get("fully_visible", False))
+        page.evaluate("(value) => window.scrollBy(0, value)", bounded_scroll_delta(scroll_delta))
+        page.wait_for_timeout(50)
+        if time.monotonic() >= deadline:
+            return bool(centering.get("fully_visible", False))
+
+
+def selector_match_indices(page, *, selector: str, require_viewport: bool = False) -> list[int]:
+    indices = page.evaluate(
+        """([sel, requireViewport]) => {
+            const nodes = Array.from(document.querySelectorAll(sel));
+            const output = [];
+            for (let i = 0; i < nodes.length; i += 1) {
+                const node = nodes[i];
+                if (!(node instanceof Element)) {
+                    continue;
+                }
+                const style = window.getComputedStyle(node);
+                if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") === 0) {
+                    continue;
+                }
+                const rect = node.getBoundingClientRect();
+                if (rect.width < 2 || rect.height < 2) {
+                    continue;
+                }
+                if (requireViewport) {
+                    const intersectsViewport =
+                        rect.bottom > 0 &&
+                        rect.top < window.innerHeight &&
+                        rect.right > 0 &&
+                        rect.left < window.innerWidth;
+                    if (!intersectsViewport) {
+                        continue;
+                    }
+                }
+                output.push(i);
+            }
+            return output;
+        }""",
+        [selector, bool(require_viewport)],
+    )
+    if not isinstance(indices, list):
+        return []
+    return [int(value) for value in indices]
+
+
+def selector_line_count(page, *, selector: str, match_index: int, timeout_ms: int) -> int:
+    deadline = time.monotonic() + max(timeout_ms, 0) / 1000.0
+    while True:
+        line_count = page.evaluate(
+            """([sel, requestedIndex]) => {
+                const nodes = Array.from(document.querySelectorAll(sel));
+                if (requestedIndex < 0 || requestedIndex >= nodes.length) {
+                    return null;
+                }
+                const node = nodes[requestedIndex];
+                if (!(node instanceof Element)) {
+                    return null;
+                }
+                const style = window.getComputedStyle(node);
+                if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") === 0) {
+                    return null;
+                }
+                const text = String(node.innerText || node.textContent || "");
+                const lines = text
+                    .split(/\\r?\\n/)
+                    .map((line) => line.trim())
+                    .filter((line) => line.length > 0);
+                return Math.max(lines.length, 1);
+            }""",
+            [selector, int(match_index)],
+        )
+        if line_count is not None:
+            return max(int(line_count), 1)
+        if time.monotonic() >= deadline:
+            return 1
+        page.wait_for_timeout(40)
+
+
+def find_related_selector_index(
+    page,
+    *,
+    source_selector: str,
+    source_match_index: int,
+    candidate_selector: str,
+    prefer_right: bool = True,
+    require_viewport: bool = True,
+) -> int | None:
+    result = page.evaluate(
+        """([sourceSelector, sourceIndex, candidateSelector, preferRight, requireViewport]) => {
+            const sourceNodes = Array.from(document.querySelectorAll(sourceSelector));
+            if (sourceIndex < 0 || sourceIndex >= sourceNodes.length) {
+                return null;
+            }
+            const sourceNode = sourceNodes[sourceIndex];
+            if (!(sourceNode instanceof Element)) {
+                return null;
+            }
+            const sourceStyle = window.getComputedStyle(sourceNode);
+            if (sourceStyle.display === "none" || sourceStyle.visibility === "hidden" || Number(sourceStyle.opacity || "1") === 0) {
+                return null;
+            }
+            const sourceRect = sourceNode.getBoundingClientRect();
+            if (sourceRect.width < 2 || sourceRect.height < 2) {
+                return null;
+            }
+
+            const sourceCenterY = sourceRect.top + sourceRect.height / 2.0;
+            const sourceLeft = sourceRect.left;
+            const candidateNodes = Array.from(document.querySelectorAll(candidateSelector));
+            let best = null;
+
+            for (let i = 0; i < candidateNodes.length; i += 1) {
+                const node = candidateNodes[i];
+                if (!(node instanceof Element)) {
+                    continue;
+                }
+                const style = window.getComputedStyle(node);
+                if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") === 0) {
+                    continue;
+                }
+                const rect = node.getBoundingClientRect();
+                if (rect.width < 2 || rect.height < 2) {
+                    continue;
+                }
+                if (requireViewport) {
+                    const intersectsViewport =
+                        rect.bottom > 0 &&
+                        rect.top < window.innerHeight &&
+                        rect.right > 0 &&
+                        rect.left < window.innerWidth;
+                    if (!intersectsViewport) {
+                        continue;
+                    }
+                }
+                const centerY = rect.top + rect.height / 2.0;
+                const verticalDistance = Math.abs(centerY - sourceCenterY);
+                const horizontalPenalty = preferRight && rect.left < sourceLeft ? 900.0 : 0.0;
+                const score = verticalDistance + horizontalPenalty;
+                if (!best || score < best.score) {
+                    best = { score, index: i };
+                }
+            }
+            return best ? best.index : null;
+        }""",
+        [source_selector, int(source_match_index), candidate_selector, bool(prefer_right), bool(require_viewport)],
+    )
+    if result is None:
+        return None
+    return int(result)
 
 
 def run_actions(
@@ -1527,27 +1863,28 @@ def run_actions(
             padding = float(action.get("padding", 16.0))
             dim_opacity = float(action.get("dim_opacity", 0.18))
             auto_scroll = bool(action.get("auto_scroll", True))
+            center_target = bool(action.get("center_target", True))
+            match_index = int(action["match_index"]) if action.get("match_index") is not None else None
             ensure_focus_overlay(page)
-            visible = ensure_selector_fully_visible(page, selector=selector, timeout_ms=timeout_ms)
+            if center_target:
+                visible = center_selector_in_view(
+                    page,
+                    selector=selector,
+                    timeout_ms=timeout_ms,
+                    match_index=match_index,
+                )
+            else:
+                visible = ensure_selector_fully_visible(
+                    page,
+                    selector=selector,
+                    timeout_ms=timeout_ms,
+                    match_index=match_index,
+                )
             if not visible and optional:
                 page.evaluate("() => window.__demoFocusOff?.()")
                 continue
             if not visible:
-                raise RuntimeError(f"Could not bring selector into full view: {selector}")
-            has_target = focus_selector(
-                page,
-                selector=selector,
-                timeout_ms=timeout_ms,
-                padding=padding,
-                zoom=zoom,
-                dim_opacity=dim_opacity,
-                auto_scroll=auto_scroll,
-            )
-            if not has_target and optional:
-                page.evaluate("() => window.__demoFocusOff?.()")
-                continue
-            if not has_target:
-                raise RuntimeError(f"Could not focus selector: {selector}")
+                raise RuntimeError(f"Could not bring selector into view: {selector}")
 
             if show_mouse_overlay:
                 ensure_mouse_overlay(page)
@@ -1556,9 +1893,26 @@ def run_actions(
                     selector=selector,
                     timeout_ms=timeout_ms,
                     anchor="edge",
+                    match_index=match_index,
                 )
                 if target_info is not None:
                     move_cursor_to(float(target_info["x"]), float(target_info["y"]))
+
+            has_target = focus_selector(
+                page,
+                selector=selector,
+                timeout_ms=timeout_ms,
+                padding=padding,
+                zoom=zoom,
+                dim_opacity=dim_opacity,
+                auto_scroll=auto_scroll,
+                match_index=match_index,
+            )
+            if not has_target and optional:
+                page.evaluate("() => window.__demoFocusOff?.()")
+                continue
+            if not has_target:
+                raise RuntimeError(f"Could not focus selector: {selector}")
 
             wait_ms = int(float(action.get("wait_seconds", 0.8)) * 1000)
             if wait_ms > 0:
@@ -1569,16 +1923,282 @@ def run_actions(
                 page.wait_for_timeout(settle_ms)
             continue
 
+        if action_type == "focus_each":
+            selector = action["selector"]
+            optional = bool(action.get("optional", False))
+            timeout_ms = int(action.get("timeout_ms", 2600))
+            zoom = float(action.get("zoom", 1.03))
+            padding = float(action.get("padding", 16.0))
+            dim_opacity = float(action.get("dim_opacity", 0.18))
+            auto_scroll = bool(action.get("auto_scroll", False))
+            center_target = bool(action.get("center_target", True))
+            wait_ms = int(float(action.get("wait_seconds", 1.2)) * 1000)
+            settle_ms = int(float(action.get("post_wait_seconds", 0.16)) * 1000)
+            ensure_focus_overlay(page)
+            match_indices = selector_match_indices(page, selector=selector, require_viewport=False)
+            if not match_indices:
+                if optional:
+                    page.evaluate("() => window.__demoFocusOff?.()")
+                    continue
+                raise RuntimeError(f"No matching selectors for focus_each: {selector}")
+            for current_index in match_indices:
+                if center_target:
+                    visible = center_selector_in_view(
+                        page,
+                        selector=selector,
+                        timeout_ms=timeout_ms,
+                        match_index=current_index,
+                    )
+                else:
+                    visible = ensure_selector_fully_visible(
+                        page,
+                        selector=selector,
+                        timeout_ms=timeout_ms,
+                        match_index=current_index,
+                    )
+                if not visible:
+                    if optional:
+                        continue
+                    raise RuntimeError(f"Could not bring selector into view: {selector}[{current_index}]")
+
+                if show_mouse_overlay:
+                    ensure_mouse_overlay(page)
+                    target_info = resolve_selector_target(
+                        page,
+                        selector=selector,
+                        timeout_ms=timeout_ms,
+                        anchor="edge",
+                        match_index=current_index,
+                    )
+                    if target_info is not None:
+                        move_cursor_to(float(target_info["x"]), float(target_info["y"]))
+
+                has_target = focus_selector(
+                    page,
+                    selector=selector,
+                    timeout_ms=timeout_ms,
+                    padding=padding,
+                    zoom=zoom,
+                    dim_opacity=dim_opacity,
+                    auto_scroll=auto_scroll,
+                    match_index=current_index,
+                )
+                if not has_target:
+                    if optional:
+                        page.evaluate("() => window.__demoFocusOff?.()")
+                        continue
+                    raise RuntimeError(f"Could not focus selector: {selector}[{current_index}]")
+
+                if wait_ms > 0:
+                    page.wait_for_timeout(wait_ms)
+                page.evaluate("() => window.__demoFocusOff?.()")
+                if settle_ms > 0:
+                    page.wait_for_timeout(settle_ms)
+            continue
+
+        if action_type == "prompt_task_pairs":
+            prompt_selector = str(action.get("prompt_selector", ".prompt-box"))
+            task_selector = str(action.get("task_selector", ".task-box"))
+            copy_button_selector = str(action.get("copy_button_selector", ".copy-btn"))
+            optional = bool(action.get("optional", False))
+            timeout_ms = int(action.get("timeout_ms", 3000))
+            prompt_zoom = float(action.get("prompt_zoom", 1.03))
+            prompt_padding = float(action.get("prompt_padding", 16.0))
+            prompt_dim = float(action.get("prompt_dim_opacity", 0.18))
+            prompt_seconds_per_five_lines = float(action.get("prompt_seconds_per_five_lines", 2.0))
+            prompt_min_seconds = float(action.get("prompt_min_seconds", 2.0))
+            prompt_settle_ms = int(float(action.get("prompt_post_wait_seconds", 0.18)) * 1000)
+            task_zoom = float(action.get("task_zoom", 1.02))
+            task_padding = float(action.get("task_padding", 16.0))
+            task_dim = float(action.get("task_dim_opacity", 0.17))
+            task_hold_ms = int(float(action.get("task_hold_seconds", 2.0)) * 1000)
+            task_settle_ms = int(float(action.get("task_post_wait_seconds", 0.18)) * 1000)
+            copy_pre_click_ms = int(float(action.get("copy_pre_click_delay_seconds", 0.0)) * 1000)
+            copy_hold_ms = int(float(action.get("copy_hold_seconds", 0.5)) * 1000)
+            ensure_focus_overlay(page)
+            prompt_indices = selector_match_indices(page, selector=prompt_selector, require_viewport=False)
+            if not prompt_indices:
+                if optional:
+                    page.evaluate("() => window.__demoFocusOff?.()")
+                    continue
+                raise RuntimeError(f"No prompts found for selector: {prompt_selector}")
+
+            for prompt_index in prompt_indices:
+                centered = center_selector_in_view(
+                    page,
+                    selector=prompt_selector,
+                    timeout_ms=timeout_ms,
+                    match_index=prompt_index,
+                )
+                if not centered:
+                    if optional:
+                        continue
+                    raise RuntimeError(f"Could not center prompt selector: {prompt_selector}[{prompt_index}]")
+
+                if show_mouse_overlay:
+                    ensure_mouse_overlay(page)
+                    prompt_target_info = resolve_selector_target(
+                        page,
+                        selector=prompt_selector,
+                        timeout_ms=timeout_ms,
+                        anchor="edge",
+                        match_index=prompt_index,
+                    )
+                    if prompt_target_info is not None:
+                        move_cursor_to(float(prompt_target_info["x"]), float(prompt_target_info["y"]))
+
+                has_prompt_focus = focus_selector(
+                    page,
+                    selector=prompt_selector,
+                    timeout_ms=timeout_ms,
+                    padding=prompt_padding,
+                    zoom=prompt_zoom,
+                    dim_opacity=prompt_dim,
+                    auto_scroll=False,
+                    match_index=prompt_index,
+                )
+                if not has_prompt_focus:
+                    if optional:
+                        page.evaluate("() => window.__demoFocusOff?.()")
+                        continue
+                    raise RuntimeError(f"Could not focus prompt selector: {prompt_selector}[{prompt_index}]")
+
+                prompt_line_count = selector_line_count(
+                    page,
+                    selector=prompt_selector,
+                    match_index=prompt_index,
+                    timeout_ms=timeout_ms,
+                )
+                prompt_groups = max(int(math.ceil(float(prompt_line_count) / 5.0)), 1)
+                prompt_hold_seconds = max(
+                    prompt_min_seconds,
+                    prompt_groups * max(prompt_seconds_per_five_lines, 0.2),
+                )
+                page.wait_for_timeout(int(prompt_hold_seconds * 1000))
+                page.evaluate("() => window.__demoFocusOff?.()")
+                if prompt_settle_ms > 0:
+                    page.wait_for_timeout(prompt_settle_ms)
+
+                copy_button_index = find_related_selector_index(
+                    page,
+                    source_selector=prompt_selector,
+                    source_match_index=prompt_index,
+                    candidate_selector=copy_button_selector,
+                    prefer_right=True,
+                    require_viewport=True,
+                )
+                if copy_button_index is None:
+                    if not optional:
+                        raise RuntimeError(
+                            "Could not find a copy button paired with prompt selector: "
+                            f"{prompt_selector}[{prompt_index}]"
+                        )
+                else:
+                    if show_mouse_overlay:
+                        ensure_mouse_overlay(page)
+                        copy_target_info = resolve_selector_target(
+                            page,
+                            selector=copy_button_selector,
+                            timeout_ms=timeout_ms,
+                            anchor="center",
+                            match_index=copy_button_index,
+                        )
+                        if copy_target_info is not None:
+                            move_cursor_to(float(copy_target_info["x"]), float(copy_target_info["y"]))
+
+                    if copy_pre_click_ms > 0:
+                        page.wait_for_timeout(copy_pre_click_ms)
+
+                    copy_target_info = resolve_selector_target(
+                        page,
+                        selector=copy_button_selector,
+                        timeout_ms=timeout_ms,
+                        anchor="center",
+                        match_index=copy_button_index,
+                    )
+                    if copy_target_info is None:
+                        if not optional:
+                            raise RuntimeError(
+                                "Could not resolve copy button target for prompt selector: "
+                                f"{prompt_selector}[{prompt_index}]"
+                            )
+                    else:
+                        if show_mouse_overlay:
+                            move_cursor_to(float(copy_target_info["x"]), float(copy_target_info["y"]))
+                            page.evaluate("() => window.__demoMouseClick?.()")
+                            track_cursor(float(copy_target_info["x"]), float(copy_target_info["y"]), kind="click")
+                        track_interaction("click")
+                        click_index = int(copy_target_info["index"])
+                        page.locator(copy_button_selector).nth(click_index).click(timeout=timeout_ms)
+                        if copy_hold_ms > 0:
+                            page.wait_for_timeout(copy_hold_ms)
+
+                task_index = find_related_selector_index(
+                    page,
+                    source_selector=prompt_selector,
+                    source_match_index=prompt_index,
+                    candidate_selector=task_selector,
+                    prefer_right=True,
+                    require_viewport=True,
+                )
+                if task_index is None:
+                    if optional:
+                        continue
+                    raise RuntimeError(
+                        f"Could not find a task paired with prompt selector: {prompt_selector}[{prompt_index}]"
+                    )
+
+                if show_mouse_overlay:
+                    ensure_mouse_overlay(page)
+                    task_target_info = resolve_selector_target(
+                        page,
+                        selector=task_selector,
+                        timeout_ms=timeout_ms,
+                        anchor="edge",
+                        match_index=task_index,
+                    )
+                    if task_target_info is not None:
+                        move_cursor_to(float(task_target_info["x"]), float(task_target_info["y"]))
+
+                has_task_focus = focus_selector(
+                    page,
+                    selector=task_selector,
+                    timeout_ms=timeout_ms,
+                    padding=task_padding,
+                    zoom=task_zoom,
+                    dim_opacity=task_dim,
+                    auto_scroll=False,
+                    match_index=task_index,
+                )
+                if not has_task_focus:
+                    if optional:
+                        page.evaluate("() => window.__demoFocusOff?.()")
+                        continue
+                    raise RuntimeError(f"Could not focus task selector: {task_selector}[{task_index}]")
+
+                if task_hold_ms > 0:
+                    page.wait_for_timeout(task_hold_ms)
+                page.evaluate("() => window.__demoFocusOff?.()")
+                if task_settle_ms > 0:
+                    page.wait_for_timeout(task_settle_ms)
+            continue
+
         if action_type == "click":
             selector = action["selector"]
             optional = bool(action.get("optional", False))
             timeout_ms = int(action.get("timeout_ms", 2000))
-            ensure_selector_fully_visible(page, selector=selector, timeout_ms=timeout_ms)
+            match_index = int(action["match_index"]) if action.get("match_index") is not None else None
+            center_target = bool(action.get("center_target", False))
+            if center_target:
+                center_selector_in_view(page, selector=selector, timeout_ms=timeout_ms, match_index=match_index)
+            else:
+                ensure_selector_fully_visible(page, selector=selector, timeout_ms=timeout_ms, match_index=match_index)
             target_info = resolve_selector_target(
                 page,
                 selector=selector,
                 timeout_ms=timeout_ms,
                 anchor="center",
+                match_index=match_index,
             )
             if target_info is None and optional:
                 continue
@@ -1599,6 +2219,7 @@ def run_actions(
                 selector=selector,
                 timeout_ms=timeout_ms,
                 anchor="center",
+                match_index=match_index,
             )
             if target_info is None and optional:
                 continue
@@ -1742,71 +2363,168 @@ def build_process_actions(pages: list[str]) -> list[dict]:
     if not lesson_pages:
         lesson_pages = pages
 
+    if not lesson_pages:
+        return actions
+
+    def focus_action(
+        selector: str,
+        *,
+        wait_seconds: float,
+        optional: bool = True,
+        zoom: float = 1.02,
+        padding: float = 16.0,
+        dim_opacity: float = 0.17,
+        timeout_ms: int = 3000,
+        center_target: bool = True,
+        post_wait_seconds: float = 0.22,
+    ) -> dict:
+        return {
+            "type": "focus",
+            "selector": selector,
+            "optional": optional,
+            "wait_seconds": wait_seconds,
+            "zoom": zoom,
+            "padding": padding,
+            "dim_opacity": dim_opacity,
+            "post_wait_seconds": post_wait_seconds,
+            "auto_scroll": False,
+            "center_target": center_target,
+            "timeout_ms": timeout_ms,
+        }
+
     actions.append({"type": "goto", "path": lesson_pages[0], "wait_seconds": 1.00})
     for index, page in enumerate(lesson_pages):
+        page_name = Path(page).name.lower()
         actions.append(
-            {
-                "type": "focus",
-                "selector": "#p1-outcomes",
-                "optional": True,
-                "wait_seconds": 1.35,
-                "zoom": 1.015,
-                "padding": 14.0,
-                "dim_opacity": 0.16,
-                "post_wait_seconds": 0.26,
-                "auto_scroll": False,
-            }
+            focus_action(
+                "section.card:has(#p1-outcomes)",
+                wait_seconds=1.55,
+                zoom=1.015,
+                padding=14.0,
+                dim_opacity=0.16,
+            )
         )
-        actions.append({"type": "scroll", "pixels": 430, "duration_seconds": 1.45, "steps": 20})
+
+        if page_name == "lesson-0-foundations.html":
+            actions.append(
+                focus_action(
+                    "section.card:has(#p2-vocabulary)",
+                    wait_seconds=1.20,
+                    zoom=1.01,
+                    padding=14.0,
+                    dim_opacity=0.15,
+                )
+            )
+            actions.append(
+                {
+                    "type": "focus_each",
+                    "selector": "section.card:has(#p2-vocabulary) .note",
+                    "optional": True,
+                    "wait_seconds": 1.45,
+                    "zoom": 1.02,
+                    "padding": 14.0,
+                    "dim_opacity": 0.17,
+                    "post_wait_seconds": 0.20,
+                    "auto_scroll": False,
+                    "center_target": True,
+                    "timeout_ms": 3200,
+                }
+            )
+            actions.append(
+                focus_action(
+                    "section.card:has(#p2-vocabulary) .diagram",
+                    wait_seconds=1.55,
+                    zoom=1.015,
+                    padding=14.0,
+                    dim_opacity=0.16,
+                    timeout_ms=3200,
+                )
+            )
+            actions.append(
+                focus_action(
+                    "section.card:has(#p2-vocabulary) .example",
+                    wait_seconds=1.45,
+                    zoom=1.015,
+                    padding=14.0,
+                    dim_opacity=0.16,
+                    timeout_ms=3200,
+                )
+            )
+            actions.append(
+                focus_action(
+                    "section.card:has(#p8-summary)",
+                    wait_seconds=1.55,
+                    zoom=1.01,
+                    padding=14.0,
+                    dim_opacity=0.16,
+                    timeout_ms=3200,
+                )
+            )
+        else:
+            actions.append(
+                {
+                    "type": "prompt_task_pairs",
+                    "prompt_selector": ".prompt-box",
+                    "task_selector": ".task-box",
+                    "copy_button_selector": ".copy-btn",
+                    "optional": True,
+                    "timeout_ms": 3400,
+                    "prompt_zoom": 1.03,
+                    "prompt_padding": 16.0,
+                    "prompt_dim_opacity": 0.18,
+                    "prompt_seconds_per_five_lines": 2.0,
+                    "prompt_min_seconds": 2.0,
+                    "prompt_post_wait_seconds": 0.20,
+                    "copy_pre_click_delay_seconds": 0.0,
+                    "copy_hold_seconds": 0.5,
+                    "task_zoom": 1.02,
+                    "task_padding": 16.0,
+                    "task_dim_opacity": 0.17,
+                    "task_hold_seconds": 2.0,
+                    "task_post_wait_seconds": 0.20,
+                }
+            )
+
+        if page_name == "lesson-3-mcp-decoupling.html":
+            actions.append(
+                focus_action(
+                    "section.card:has(#p10-scope)",
+                    wait_seconds=1.50,
+                    zoom=1.01,
+                    padding=14.0,
+                    dim_opacity=0.16,
+                )
+            )
+        if page_name == "lesson-4-skills.html":
+            actions.append(
+                focus_action(
+                    "section.card:has(#p10-scope)",
+                    wait_seconds=1.50,
+                    zoom=1.01,
+                    padding=14.0,
+                    dim_opacity=0.16,
+                )
+            )
+        if page_name == "lesson-5-ui-boundary.html":
+            actions.append(
+                focus_action(
+                    "section.card:has(#p10-teaches)",
+                    wait_seconds=1.50,
+                    zoom=1.01,
+                    padding=14.0,
+                    dim_opacity=0.16,
+                )
+            )
+
         actions.append(
-            {
-                "type": "focus",
-                "selector": ".prompt-box",
-                "optional": True,
-                "wait_seconds": 1.80,
-                "zoom": 1.03,
-                "padding": 16.0,
-                "dim_opacity": 0.18,
-                "post_wait_seconds": 0.28,
-                "auto_scroll": False,
-            }
-        )
-        actions.append(
-            {
-                "type": "click",
-                "selector": ".prompt-box .copy-btn",
-                "optional": True,
-                "wait_seconds": 0.52,
-                "timeout_ms": 1800,
-            }
-        )
-        actions.append({"type": "scroll", "pixels": 360, "duration_seconds": 1.25, "steps": 18})
-        actions.append(
-            {
-                "type": "focus",
-                "selector": ".task-box",
-                "optional": True,
-                "wait_seconds": 1.40,
-                "zoom": 1.02,
-                "padding": 16.0,
-                "dim_opacity": 0.17,
-                "post_wait_seconds": 0.26,
-                "auto_scroll": False,
-            }
-        )
-        actions.append({"type": "scroll", "pixels": 480, "duration_seconds": 1.55, "steps": 22})
-        actions.append(
-            {
-                "type": "focus",
-                "selector": ".checkpoint",
-                "optional": True,
-                "wait_seconds": 1.45,
-                "zoom": 1.02,
-                "padding": 16.0,
-                "dim_opacity": 0.16,
-                "post_wait_seconds": 0.32,
-                "auto_scroll": False,
-            }
+            focus_action(
+                ".checkpoint",
+                wait_seconds=1.55,
+                zoom=1.02,
+                padding=16.0,
+                dim_opacity=0.16,
+                timeout_ms=3200,
+            )
         )
         actions.append({"type": "wait", "seconds": 0.60})
         if index < len(lesson_pages) - 1:
@@ -2117,17 +2835,23 @@ def run_site_videos(args: argparse.Namespace) -> list[Path]:
                 video_path=process_output,
                 workflow_name="site-videos/process",
                 story_summary=(
-                    "Show the real lesson flow across the tutorial pages (excluding the landing preview): "
-                    "highlight learning outcomes, Codex prompt blocks, student task checklists, and final "
-                    "checkpoint question sections with smooth focus-in/focus-out shots."
+                    "Show the real lesson flow across tutorial pages with emphasis on the P1 "
+                    "\"By the end of this page you should be able to...\" block, full Lesson 0 "
+                    "vocabulary coverage, smooth-scroll prompt-to-task walkthroughs with copy clicks, centered checkpoint "
+                    "spotlights, and centered page-review sections."
                 ),
                 args=args,
                 actions=process_actions,
                 performance=process_perf,
                 story_notes=[
                     "Target viewer should feel how Codex is used as a practical learning accelerator.",
-                    "Prompt copy interactions are included to reinforce actionable usage, not passive reading.",
+                    "Every centering step must be a smooth scroll from the current viewport state (no jumps).",
+                    "For #p* targets, spotlight the entire containing white card, not only the heading line.",
+                    "Move cursor smoothly to each target before spotlight/highlight.",
+                    "Prompt flow is prompt spotlight first, then copy-button click (hold 0.5s), then paired task-box spotlight without extra scrolling.",
+                    "Prompt hold time scales with content length using the 2s-per-5-lines rule.",
                     "Checkpoint sections are shown without revealing answers to preserve learner reflection.",
+                    "Outcomes emphasis is the P1 block that starts with \"By the end of this page you should be able to...\".",
                     "Audio includes a subtle elevator-music bed plus click/scroll interaction cues.",
                 ],
             )
