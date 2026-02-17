@@ -1,6 +1,6 @@
 # Video Directives: learning-process-fast.mp4
 
-- Generated (UTC): `2026-02-17T06:33:42+00:00`
+- Generated (UTC): `2026-02-17T06:49:30+00:00`
 - Tool: `browser_video_creator`
 - Workflow: `site-videos/process`
 - Output video: `C:\here\AI_agents_lectures\Lessons\tutorial_site\media\learning-process-fast.mp4`
@@ -8,7 +8,7 @@
 ## Capture Directives
 - Resolution: `2560x1440`
 - FPS: `30`
-- Browser preference: `chrome`
+- Browser preference: `auto`
 - Show browser window: `False`
 - Mouse overlay: `True`
 - Pre-click delay (seconds): `1.00`
@@ -79,13 +79,13 @@
 - To change interaction emphasis: tune `--pre-click-delay-seconds` and mouse overlay settings.
 
 ## Performance Status
-- Raw video generation (seconds): `128.429`
-- Post processing (seconds): `122.091`
-- Transcode step (seconds): `97.745`
-- Effects step (seconds): `24.346`
-- Video length (seconds): `112.800`
-- Video size on disk (bytes): `35813015`
+- Raw video generation (seconds): `115.528`
+- Post processing (seconds): `132.334`
+- Transcode step (seconds): `97.532`
+- Effects step (seconds): `34.803`
+- Video length (seconds): `109.730`
+- Video size on disk (bytes): `36737039`
 - Has audio stream: `True`
-- Directives generation (seconds): `0.002039`
-- Story generation (seconds): `0.001843`
-- Sidecar generation total (seconds): `0.003883`
+- Directives generation (seconds): `0.001898`
+- Story generation (seconds): `0.001428`
+- Sidecar generation total (seconds): `0.003326`

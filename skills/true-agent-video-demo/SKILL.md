@@ -11,6 +11,7 @@ Use this skill when video requests require real agent demonstration and architec
 
 Read and follow:
 - `skills/true-agent-video-demo/true-agent-video-demo.md`
+- `skills/video-render-policy/video-render-policy.md`
 
 ## Minimum completion criteria
 

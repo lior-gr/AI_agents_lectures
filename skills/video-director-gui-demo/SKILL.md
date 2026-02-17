@@ -11,6 +11,7 @@ Use this skill when recording GUI app demos that must look like authentic user b
 
 Read and follow:
 - `skills/video-director-gui-demo/video-director-gui-demo.md`
+- `skills/video-render-policy/video-render-policy.md`
 
 ## Minimum completion criteria
 

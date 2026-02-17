@@ -555,24 +555,51 @@ def synthesize_interaction_audio(
             scroll_tick_index += 1
 
     if include_background_music:
-        # Procedural, low-volume lounge bed (no external assets).
+        # Procedural upbeat background bed (no external assets).
+        tempo_bpm = 116.0
+        beats_per_second = tempo_bpm / 60.0
         chords = [
             (261.63, 329.63, 392.00),  # C major
-            (293.66, 369.99, 440.00),  # D minor
-            (329.63, 415.30, 493.88),  # E minor
-            (293.66, 349.23, 440.00),  # D suspended feel
+            (392.00, 493.88, 587.33),  # G major
+            (440.00, 523.25, 659.25),  # A minor (light color)
+            (349.23, 440.00, 523.25),  # F major
         ]
+        arp_pattern = (0, 1, 2, 1)
         for i in range(total_samples):
             t = i / float(sample_rate)
-            chord = chords[int(t / 8.0) % len(chords)]
-            mod = 0.82 + 0.18 * math.sin(2.0 * math.pi * 0.12 * t)
+            beats = t * beats_per_second
+            bar_index = int(beats / 4.0) % len(chords)
+            chord = chords[bar_index]
+
+            beat_pos = beats - math.floor(beats)
+            eighth = beats * 2.0
+            eighth_pos = eighth - math.floor(eighth)
+            sixteenth = beats * 4.0
+            sixteenth_pos = sixteenth - math.floor(sixteenth)
+
+            # Warm harmonic pad.
+            shimmer = 0.88 + 0.12 * math.sin(2.0 * math.pi * 0.18 * t)
             pad = (
                 math.sin(2.0 * math.pi * chord[0] * t)
-                + 0.72 * math.sin(2.0 * math.pi * chord[1] * t + 0.4)
-                + 0.56 * math.sin(2.0 * math.pi * chord[2] * t + 0.9)
-            ) / 2.28
-            bass = math.sin(2.0 * math.pi * (chord[0] * 0.5) * t + 0.2)
-            mix[i] += ((pad * 0.012) + (bass * 0.006)) * mod
+                + 0.72 * math.sin(2.0 * math.pi * chord[1] * t + 0.32)
+                + 0.58 * math.sin(2.0 * math.pi * chord[2] * t + 0.78)
+            ) / 2.30
+
+            # Rhythmic bass pulse.
+            bass_env = 0.52 + 0.48 * math.exp(-7.5 * beat_pos)
+            bass = math.sin(2.0 * math.pi * (chord[0] * 0.5) * t + 0.18) * bass_env
+
+            # Bright arpeggio on eighth notes.
+            arp_note = chord[arp_pattern[int(math.floor(eighth)) % len(arp_pattern)]]
+            arp_env = math.exp(-12.5 * eighth_pos)
+            arp = math.sin(2.0 * math.pi * (arp_note * 2.0) * t + 0.26) * arp_env
+
+            # Soft shaker-like texture on sixteenth notes.
+            noise_seed = math.sin((i + 19) * 12.9898) * 43758.5453
+            noise = (noise_seed - math.floor(noise_seed)) * 2.0 - 1.0
+            shaker = noise * math.exp(-24.0 * sixteenth_pos)
+
+            mix[i] += (pad * 0.011 * shimmer) + (bass * 0.0085) + (arp * 0.0125) + (shaker * 0.0026)
 
     peak = max((abs(value) for value in mix), default=0.0)
     gain = 0.82 / peak if peak > 0.82 else 1.0
