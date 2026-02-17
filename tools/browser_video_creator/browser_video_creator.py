@@ -1103,7 +1103,7 @@ def ensure_mouse_overlay(page) -> None:
             cursor.style.zIndex = "2147483647";
             cursor.style.boxShadow = "0 0 0 1px rgba(255,230,0,0.65)";
             cursor.style.transform = "translate(48px, 48px)";
-            cursor.style.transition = "transform 160ms linear";
+            cursor.style.transition = "transform 200ms linear";
             document.body.appendChild(cursor);
 
             const ring = document.createElement("div");
@@ -1173,6 +1173,7 @@ def focus_selector(
     padding: float,
     zoom: float,
     dim_opacity: float,
+    auto_scroll: bool,
 ) -> bool:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
@@ -1182,12 +1183,12 @@ def focus_selector(
     except PlaywrightTimeoutError:
         return False
 
-    try:
-        locator.scroll_into_view_if_needed(timeout=timeout_ms)
-    except PlaywrightTimeoutError:
-        return False
-
-    page.wait_for_timeout(120)
+    if auto_scroll:
+        try:
+            locator.scroll_into_view_if_needed(timeout=timeout_ms)
+        except PlaywrightTimeoutError:
+            return False
+        page.wait_for_timeout(120)
     try:
         box = locator.bounding_box(timeout=timeout_ms)
     except PlaywrightTimeoutError:
@@ -1285,6 +1286,7 @@ def run_actions(
             zoom = float(action.get("zoom", 1.03))
             padding = float(action.get("padding", 16.0))
             dim_opacity = float(action.get("dim_opacity", 0.18))
+            auto_scroll = bool(action.get("auto_scroll", True))
             ensure_focus_overlay(page)
             has_target = focus_selector(
                 page,
@@ -1293,6 +1295,7 @@ def run_actions(
                 padding=padding,
                 zoom=zoom,
                 dim_opacity=dim_opacity,
+                auto_scroll=auto_scroll,
             )
             if not has_target and optional:
                 page.evaluate("() => window.__demoFocusOff?.()")
@@ -1452,8 +1455,8 @@ def build_process_actions(pages: list[str]) -> list[dict]:
     if not lesson_pages:
         lesson_pages = pages
 
-    for page in lesson_pages:
-        actions.append({"type": "goto", "path": page, "wait_seconds": 1.00})
+    actions.append({"type": "goto", "path": lesson_pages[0], "wait_seconds": 1.00})
+    for index, page in enumerate(lesson_pages):
         actions.append(
             {
                 "type": "focus",
@@ -1464,8 +1467,10 @@ def build_process_actions(pages: list[str]) -> list[dict]:
                 "padding": 14.0,
                 "dim_opacity": 0.16,
                 "post_wait_seconds": 0.26,
+                "auto_scroll": False,
             }
         )
+        actions.append({"type": "scroll", "pixels": 430, "duration_seconds": 1.45, "steps": 20})
         actions.append(
             {
                 "type": "focus",
@@ -1476,6 +1481,7 @@ def build_process_actions(pages: list[str]) -> list[dict]:
                 "padding": 16.0,
                 "dim_opacity": 0.18,
                 "post_wait_seconds": 0.28,
+                "auto_scroll": False,
             }
         )
         actions.append(
@@ -1487,6 +1493,7 @@ def build_process_actions(pages: list[str]) -> list[dict]:
                 "timeout_ms": 1800,
             }
         )
+        actions.append({"type": "scroll", "pixels": 360, "duration_seconds": 1.25, "steps": 18})
         actions.append(
             {
                 "type": "focus",
@@ -1497,8 +1504,10 @@ def build_process_actions(pages: list[str]) -> list[dict]:
                 "padding": 16.0,
                 "dim_opacity": 0.17,
                 "post_wait_seconds": 0.26,
+                "auto_scroll": False,
             }
         )
+        actions.append({"type": "scroll", "pixels": 480, "duration_seconds": 1.55, "steps": 22})
         actions.append(
             {
                 "type": "focus",
@@ -1509,9 +1518,21 @@ def build_process_actions(pages: list[str]) -> list[dict]:
                 "padding": 16.0,
                 "dim_opacity": 0.16,
                 "post_wait_seconds": 0.32,
+                "auto_scroll": False,
             }
         )
-        actions.append({"type": "wait", "seconds": 0.65})
+        actions.append({"type": "wait", "seconds": 0.60})
+        if index < len(lesson_pages) - 1:
+            next_page = lesson_pages[index + 1]
+            actions.append(
+                {
+                    "type": "click",
+                    "selector": f"aside.sidebar a[href='{next_page}']",
+                    "optional": False,
+                    "wait_seconds": 1.10,
+                    "timeout_ms": 2600,
+                }
+            )
     actions.append({"type": "wait", "seconds": 1.25})
     return actions
 
