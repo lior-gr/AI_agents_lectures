@@ -285,6 +285,12 @@ def describe_action(action: dict) -> str:
         return f"Scroll {direction} by {abs(pixels)}px over {duration:.1f}s in {steps} steps."
     if action_type == "wait":
         return f"Idle for {float(action.get('seconds', 0.0)):.1f}s."
+    if action_type == "focus":
+        selector = str(action.get("selector", ""))
+        wait_seconds = float(action.get("wait_seconds", 0.0))
+        optional = bool(action.get("optional", False))
+        optional_note = " (optional)" if optional else ""
+        return f"Focus on `{selector}`{optional_note} with spotlight, then hold for {wait_seconds:.1f}s."
     return json.dumps(action, ensure_ascii=True)
 
 
@@ -735,7 +741,117 @@ def smooth_scroll(page, pixels: int, duration_seconds: float, steps: int) -> Non
         page.wait_for_timeout(int(delay * 1000))
 
 
+def ensure_focus_overlay(page) -> None:
+    page.evaluate(
+        """() => {
+            const shadeId = "__demo_focus_shade__";
+            const frameId = "__demo_focus_frame__";
+            if (window.__demoFocusOn && document.getElementById(shadeId) && document.getElementById(frameId)) {
+                return;
+            }
+
+            const styleId = "__demo_focus_style__";
+            if (!document.getElementById(styleId)) {
+                const style = document.createElement("style");
+                style.id = styleId;
+                style.textContent = `
+                    .__demo_focus_target__ {
+                        position: relative !important;
+                        z-index: 2147483646 !important;
+                        transform: scale(var(--demo-focus-scale, 1));
+                        transform-origin: center center;
+                        transition: transform 220ms ease, box-shadow 220ms ease;
+                        box-shadow:
+                            0 0 0 2px rgba(104, 190, 255, 0.55),
+                            0 16px 36px rgba(9, 31, 65, 0.26);
+                    }
+                `;
+                document.head.appendChild(style);
+            }
+
+            const shade = document.createElement("div");
+            shade.id = shadeId;
+            shade.style.position = "fixed";
+            shade.style.left = "0";
+            shade.style.top = "0";
+            shade.style.right = "0";
+            shade.style.bottom = "0";
+            shade.style.pointerEvents = "none";
+            shade.style.background = "rgba(8, 20, 43, 0.18)";
+            shade.style.opacity = "0";
+            shade.style.transition = "opacity 180ms ease";
+            shade.style.zIndex = "2147483644";
+            document.body.appendChild(shade);
+
+            const frame = document.createElement("div");
+            frame.id = frameId;
+            frame.style.position = "fixed";
+            frame.style.left = "0";
+            frame.style.top = "0";
+            frame.style.width = "0";
+            frame.style.height = "0";
+            frame.style.pointerEvents = "none";
+            frame.style.borderRadius = "14px";
+            frame.style.border = "3px solid rgba(29, 155, 255, 0.82)";
+            frame.style.boxShadow =
+                "0 0 0 1px rgba(255,255,255,0.24), 0 14px 34px rgba(11, 37, 75, 0.28)";
+            frame.style.opacity = "0";
+            frame.style.transition =
+                "left 220ms ease, top 220ms ease, width 220ms ease, height 220ms ease, opacity 160ms ease";
+            frame.style.zIndex = "2147483645";
+            document.body.appendChild(frame);
+
+            window.__demoFocusTarget = null;
+
+            window.__demoFocusOn = (selector, options = {}) => {
+                const target = document.querySelector(selector);
+                if (!target) {
+                    return false;
+                }
+                if (window.__demoFocusTarget && window.__demoFocusTarget !== target) {
+                    window.__demoFocusTarget.classList.remove("__demo_focus_target__");
+                    window.__demoFocusTarget.style.removeProperty("--demo-focus-scale");
+                }
+
+                const rect = target.getBoundingClientRect();
+                const padding = Number.isFinite(options.padding) ? options.padding : 16;
+                const zoom = Number.isFinite(options.zoom) ? options.zoom : 1.03;
+                const dimOpacity = Number.isFinite(options.dim_opacity) ? options.dim_opacity : 0.18;
+                const left = Math.max(rect.left - padding, 4);
+                const top = Math.max(rect.top - padding, 4);
+                const maxWidth = Math.max(window.innerWidth - left - 4, 12);
+                const maxHeight = Math.max(window.innerHeight - top - 4, 12);
+                const width = Math.min(rect.width + padding * 2, maxWidth);
+                const height = Math.min(rect.height + padding * 2, maxHeight);
+
+                shade.style.opacity = String(Math.max(0.0, Math.min(dimOpacity, 0.35)));
+                frame.style.left = `${left}px`;
+                frame.style.top = `${top}px`;
+                frame.style.width = `${width}px`;
+                frame.style.height = `${height}px`;
+                frame.style.opacity = "1";
+
+                target.classList.add("__demo_focus_target__");
+                target.style.setProperty("--demo-focus-scale", String(Math.max(1.0, Math.min(zoom, 1.08))));
+                window.__demoFocusTarget = target;
+                return true;
+            };
+
+            window.__demoFocusOff = () => {
+                shade.style.opacity = "0";
+                frame.style.opacity = "0";
+                if (window.__demoFocusTarget) {
+                    window.__demoFocusTarget.classList.remove("__demo_focus_target__");
+                    window.__demoFocusTarget.style.removeProperty("--demo-focus-scale");
+                    window.__demoFocusTarget = null;
+                }
+            };
+        }"""
+    )
+
+
 def ensure_mouse_overlay(page) -> None:
+    ensure_focus_overlay(page)
     page.evaluate(
         """() => {
             const id = "__demo_mouse_overlay__";
@@ -792,7 +908,9 @@ def ensure_mouse_overlay(page) -> None:
     )
 
 
-def move_mouse_to_selector(page, selector: str, timeout_ms: int) -> tuple[float, float] | None:
+def move_mouse_to_selector(
+    page, selector: str, timeout_ms: int, anchor: str = "center"
+) -> tuple[float, float] | None:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 
     try:
@@ -801,10 +919,76 @@ def move_mouse_to_selector(page, selector: str, timeout_ms: int) -> tuple[float,
         return None
     if box is None:
         return None
-    center_x = float(box["x"]) + float(box["width"]) / 2.0
-    center_y = float(box["y"]) + float(box["height"]) / 2.0
+    base_x = float(box["x"])
+    base_y = float(box["y"])
+    width = float(box["width"])
+    height = float(box["height"])
+    if anchor == "edge":
+        offset_x = min(max(width * 0.20, 10.0), max(width - 10.0, 4.0))
+        offset_y = min(max(height * 0.18, 10.0), max(height - 10.0, 4.0))
+        center_x = base_x + offset_x
+        center_y = base_y + offset_y
+    else:
+        center_x = base_x + width / 2.0
+        center_y = base_y + height / 2.0
     page.evaluate("([x, y]) => window.__demoMouseMove?.(x, y)", [center_x, center_y])
     return center_x, center_y
+
+
+def focus_selector(
+    page,
+    selector: str,
+    timeout_ms: int,
+    *,
+    padding: float,
+    zoom: float,
+    dim_opacity: float,
+) -> bool:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    locator = page.locator(selector).first
+    try:
+        locator.wait_for(state="attached", timeout=timeout_ms)
+    except PlaywrightTimeoutError:
+        return False
+
+    scrolled = page.evaluate(
+        """([sel]) => {
+            const target = document.querySelector(sel);
+            if (!target) {
+                return false;
+            }
+            target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+            return true;
+        }""",
+        [selector],
+    )
+    if not scrolled:
+        return False
+
+    page.wait_for_timeout(360)
+    try:
+        box = locator.bounding_box(timeout=timeout_ms)
+    except PlaywrightTimeoutError:
+        return False
+    if box is None:
+        return False
+
+    return bool(
+        page.evaluate(
+            """([sel, options]) => {
+                return window.__demoFocusOn?.(sel, options) ?? false;
+            }""",
+            [
+                selector,
+                {
+                    "padding": float(padding),
+                    "zoom": float(zoom),
+                    "dim_opacity": float(dim_opacity),
+                },
+            ],
+        )
+    )
 
 
 def run_actions(
@@ -853,6 +1037,43 @@ def run_actions(
                 duration_seconds=float(action["duration_seconds"]),
                 steps=int(action["steps"]),
             )
+            continue
+
+        if action_type == "focus":
+            selector = action["selector"]
+            optional = bool(action.get("optional", False))
+            timeout_ms = int(action.get("timeout_ms", 2400))
+            zoom = float(action.get("zoom", 1.03))
+            padding = float(action.get("padding", 16.0))
+            dim_opacity = float(action.get("dim_opacity", 0.18))
+            ensure_focus_overlay(page)
+            has_target = focus_selector(
+                page,
+                selector=selector,
+                timeout_ms=timeout_ms,
+                padding=padding,
+                zoom=zoom,
+                dim_opacity=dim_opacity,
+            )
+            if not has_target and optional:
+                page.evaluate("() => window.__demoFocusOff?.()")
+                continue
+            if not has_target:
+                raise RuntimeError(f"Could not focus selector: {selector}")
+
+            if show_mouse_overlay:
+                ensure_mouse_overlay(page)
+                target_pos = move_mouse_to_selector(page, selector=selector, timeout_ms=timeout_ms, anchor="edge")
+                if target_pos is not None:
+                    track_cursor(target_pos[0], target_pos[1], kind="move")
+
+            wait_ms = int(float(action.get("wait_seconds", 0.8)) * 1000)
+            if wait_ms > 0:
+                page.wait_for_timeout(wait_ms)
+            page.evaluate("() => window.__demoFocusOff?.()")
+            settle_ms = int(float(action.get("post_wait_seconds", 0.16)) * 1000)
+            if settle_ms > 0:
+                page.wait_for_timeout(settle_ms)
             continue
 
         if action_type == "click":
@@ -983,19 +1204,67 @@ def build_outcome_actions(pages: list[str]) -> list[dict]:
 
 def build_process_actions(pages: list[str]) -> list[dict]:
     actions: list[dict] = []
-    actions.append({"type": "goto", "path": "index.html", "wait_seconds": 0.7})
-    actions.append(
-        {
-            "type": "click",
-            "selector": "button[data-showcase-target='process']",
-            "optional": True,
-            "wait_seconds": 0.5,
-        }
-    )
-    for page in pages:
-        actions.append({"type": "goto", "path": page, "wait_seconds": 0.4})
-        actions.append({"type": "scroll", "pixels": 500, "duration_seconds": 1.0, "steps": 18})
-    actions.append({"type": "wait", "seconds": 0.6})
+    lesson_pages = [page for page in pages if Path(page).name.lower() != "index.html"]
+    if not lesson_pages:
+        lesson_pages = pages
+
+    for page in lesson_pages:
+        actions.append({"type": "goto", "path": page, "wait_seconds": 0.55})
+        actions.append(
+            {
+                "type": "focus",
+                "selector": "#p1-outcomes",
+                "optional": True,
+                "wait_seconds": 0.85,
+                "zoom": 1.02,
+                "padding": 14.0,
+                "dim_opacity": 0.16,
+            }
+        )
+        actions.append(
+            {
+                "type": "focus",
+                "selector": ".prompt-box",
+                "optional": True,
+                "wait_seconds": 1.05,
+                "zoom": 1.04,
+                "padding": 16.0,
+                "dim_opacity": 0.18,
+            }
+        )
+        actions.append(
+            {
+                "type": "click",
+                "selector": ".prompt-box .copy-btn",
+                "optional": True,
+                "wait_seconds": 0.28,
+                "timeout_ms": 1800,
+            }
+        )
+        actions.append(
+            {
+                "type": "focus",
+                "selector": ".task-box",
+                "optional": True,
+                "wait_seconds": 0.9,
+                "zoom": 1.03,
+                "padding": 16.0,
+                "dim_opacity": 0.17,
+            }
+        )
+        actions.append(
+            {
+                "type": "focus",
+                "selector": ".checkpoint",
+                "optional": True,
+                "wait_seconds": 1.0,
+                "zoom": 1.03,
+                "padding": 16.0,
+                "dim_opacity": 0.16,
+            }
+        )
+        actions.append({"type": "wait", "seconds": 0.3})
+    actions.append({"type": "wait", "seconds": 0.9})
     return actions
 
 
@@ -1260,13 +1529,18 @@ def run_site_videos(args: argparse.Namespace) -> list[Path]:
                 video_path=process_output,
                 workflow_name="site-videos/process",
                 story_summary=(
-                    "Walk through the learning-process perspective across tutorial pages, preserving a clear "
-                    "sense of progression and pacing."
+                    "Show the real lesson flow across the tutorial pages (excluding the landing preview): "
+                    "highlight learning outcomes, Codex prompt blocks, student task checklists, and final "
+                    "checkpoint question sections with smooth focus-in/focus-out shots."
                 ),
                 args=args,
                 actions=process_actions,
                 performance=process_perf,
-                story_notes=["Target viewer should see how the learning path unfolds step-by-step."],
+                story_notes=[
+                    "Target viewer should feel how Codex is used as a practical learning accelerator.",
+                    "Prompt copy interactions are included to reinforce actionable usage, not passive reading.",
+                    "Checkpoint sections are shown without revealing answers to preserve learner reflection.",
+                ],
             )
             outputs.extend([process_directives, process_story])
 
