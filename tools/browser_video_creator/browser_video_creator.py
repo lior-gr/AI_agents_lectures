@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import shutil
 import socket
@@ -12,6 +13,8 @@ import subprocess
 import sys
 import tempfile
 import time
+import wave
+from array import array
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import partial
@@ -322,6 +325,7 @@ def write_video_sidecars(
         f"- Show browser window: `{bool(args.show_browser)}`",
         f"- Mouse overlay: `{bool(args.show_mouse_overlay)}`",
         f"- Pre-click delay (seconds): `{max(float(args.pre_click_delay_seconds), 0.0):.2f}`",
+        "- Interaction audio: soft click and scroll sounds synchronized to actions",
         "",
         "## Interaction Script",
     ]
@@ -376,7 +380,7 @@ def write_video_sidecars(
                 f"- Raw video generation (seconds): `{float(performance.get('raw_video_generation_seconds', 0.0)):.3f}`",
                 f"- Post processing (seconds): `{float(performance.get('post_processing_seconds', 0.0)):.3f}`",
                 f"- Transcode step (seconds): `{float(performance.get('transcode_seconds', 0.0)):.3f}`",
-                f"- Overlay step (seconds): `{float(performance.get('overlay_seconds', 0.0)):.3f}`",
+                f"- Effects step (seconds): `{float(performance.get('overlay_seconds', 0.0)):.3f}`",
                 f"- Video length (seconds): `{float(performance.get('video_length_seconds', 0.0)):.3f}`",
                 f"- Video size on disk (bytes): `{int(performance.get('video_size_bytes', 0))}`",
                 f"- Has audio stream: `{bool(performance.get('has_audio', False))}`",
@@ -455,9 +459,9 @@ def transcode_webm_to_mp4(ffmpeg_exe: str, source_webm: Path, target_mp4: Path, 
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            "medium",
             "-crf",
-            "23",
+            "18",
             "-pix_fmt",
             "yuv420p",
             "-movflags",
@@ -466,6 +470,152 @@ def transcode_webm_to_mp4(ffmpeg_exe: str, source_webm: Path, target_mp4: Path, 
             str(target_mp4),
         ],
     )
+
+
+def synthesize_interaction_audio(
+    audio_path: Path,
+    *,
+    duration_seconds: float,
+    interaction_events: list[dict[str, float | str]],
+    include_background_music: bool = False,
+    sample_rate: int = 48000,
+) -> None:
+    total_samples = max(int(math.ceil(max(duration_seconds, 0.0) * sample_rate)), 1)
+    mix = array("f", [0.0]) * total_samples
+
+    def add_burst(
+        event_time: float,
+        *,
+        event_index: int,
+        duration: float,
+        amplitude: float,
+        decay: float,
+        freq_a: float,
+        freq_b: float,
+        tonal_mix: float,
+        noise_mix: float,
+    ) -> None:
+        start_sample = int(max(event_time, 0.0) * sample_rate)
+        if start_sample >= total_samples:
+            return
+        burst_samples = max(int(sample_rate * duration), 1)
+        phase = 0.31 * float((event_index % 9) + 1)
+        for n in range(burst_samples):
+            sample_index = start_sample + n
+            if sample_index >= total_samples:
+                break
+            t = n / float(sample_rate)
+            envelope = math.exp(-decay * t)
+            tonal = (
+                tonal_mix * math.sin(2.0 * math.pi * freq_a * t + phase)
+                + (1.0 - tonal_mix) * math.sin(2.0 * math.pi * freq_b * t + phase * 0.67)
+            )
+            noise_seed = math.sin((event_index + 3) * (n + 29) * 12.9898) * 43758.5453
+            noise = (noise_seed - math.floor(noise_seed)) * 2.0 - 1.0
+            sample_value = ((1.0 - noise_mix) * tonal + noise_mix * noise) * envelope * amplitude
+            mix[sample_index] += sample_value
+
+    click_events = [event for event in interaction_events if str(event.get("kind", "")) == "click"]
+    scroll_events = [event for event in interaction_events if str(event.get("kind", "")) == "scroll"]
+
+    for index, event in enumerate(click_events):
+        add_burst(
+            float(event.get("t", 0.0)),
+            event_index=index,
+            duration=0.085,
+            amplitude=0.075,
+            decay=46.0,
+            freq_a=680.0 + float((index % 2) * 34),
+            freq_b=1620.0 + float((index % 3) * 58),
+            tonal_mix=0.60,
+            noise_mix=0.16,
+        )
+
+    scroll_tick_index = 0
+    for event in scroll_events:
+        start_time = max(float(event.get("t", 0.0)), 0.0)
+        duration = max(float(event.get("duration", 0.0)), 0.0)
+        if duration <= 0.0:
+            continue
+        tick_gap = 0.135
+        tick_count = max(int(duration / tick_gap), 1)
+        for tick in range(tick_count):
+            tick_time = start_time + min((tick + 0.25) * tick_gap, duration)
+            add_burst(
+                tick_time,
+                event_index=scroll_tick_index,
+                duration=0.048,
+                amplitude=0.028,
+                decay=62.0,
+                freq_a=900.0 + float((scroll_tick_index % 4) * 22),
+                freq_b=1240.0 + float((scroll_tick_index % 3) * 31),
+                tonal_mix=0.56,
+                noise_mix=0.22,
+            )
+            scroll_tick_index += 1
+
+    if include_background_music:
+        # Procedural, low-volume lounge bed (no external assets).
+        chords = [
+            (261.63, 329.63, 392.00),  # C major
+            (293.66, 369.99, 440.00),  # D minor
+            (329.63, 415.30, 493.88),  # E minor
+            (293.66, 349.23, 440.00),  # D suspended feel
+        ]
+        for i in range(total_samples):
+            t = i / float(sample_rate)
+            chord = chords[int(t / 8.0) % len(chords)]
+            mod = 0.82 + 0.18 * math.sin(2.0 * math.pi * 0.12 * t)
+            pad = (
+                math.sin(2.0 * math.pi * chord[0] * t)
+                + 0.72 * math.sin(2.0 * math.pi * chord[1] * t + 0.4)
+                + 0.56 * math.sin(2.0 * math.pi * chord[2] * t + 0.9)
+            ) / 2.28
+            bass = math.sin(2.0 * math.pi * (chord[0] * 0.5) * t + 0.2)
+            mix[i] += ((pad * 0.012) + (bass * 0.006)) * mod
+
+    peak = max((abs(value) for value in mix), default=0.0)
+    gain = 0.82 / peak if peak > 0.82 else 1.0
+    pcm_samples = array("h")
+    for value in mix:
+        clamped = max(-1.0, min(1.0, value * gain))
+        pcm_samples.append(int(round(clamped * 32767.0)))
+
+    audio_path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(audio_path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(pcm_samples.tobytes())
+
+
+def mux_audio_into_mp4(ffmpeg_exe: str, video_path: Path, audio_path: Path) -> None:
+    if not audio_path.exists():
+        return
+    temp_output = video_path.with_name(f"{video_path.stem}.audio.tmp.mp4")
+    run_ffmpeg(
+        ffmpeg_exe,
+        [
+            "-y",
+            "-i",
+            str(video_path),
+            "-i",
+            str(audio_path),
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-ar",
+            "48000",
+            "-shortest",
+            "-movflags",
+            "+faststart",
+            str(temp_output),
+        ],
+    )
+    shutil.move(str(temp_output), str(video_path))
 
 
 def probe_video_duration_seconds(video_path: Path) -> float:
@@ -858,6 +1008,8 @@ def ensure_mouse_overlay(page) -> None:
             if (window.__demoMouseMove && document.getElementById(id)) {
                 return;
             }
+            document.documentElement.style.cursor = "none";
+            document.body.style.cursor = "none";
             const cursor = document.createElement("div");
             cursor.id = id;
             cursor.style.position = "fixed";
@@ -966,7 +1118,7 @@ def focus_selector(
     if not scrolled:
         return False
 
-    page.wait_for_timeout(360)
+    page.wait_for_timeout(520)
     try:
         box = locator.bounding_box(timeout=timeout_ms)
     except PlaywrightTimeoutError:
@@ -999,6 +1151,7 @@ def run_actions(
     show_mouse_overlay: bool,
     pre_click_delay_seconds: float,
     cursor_events: list[dict[str, float | str]] | None = None,
+    interaction_events: list[dict[str, float | str]] | None = None,
     time_origin: float | None = None,
 ) -> None:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -1011,6 +1164,18 @@ def run_actions(
         else:
             timestamp = max(time.monotonic() - time_origin, 0.0)
         cursor_events.append({"t": timestamp, "x": float(x), "y": float(y), "kind": kind})
+
+    def track_interaction(kind: str, duration: float | None = None) -> None:
+        if interaction_events is None:
+            return
+        if time_origin is None:
+            timestamp = 0.0
+        else:
+            timestamp = max(time.monotonic() - time_origin, 0.0)
+        event: dict[str, float | str] = {"t": timestamp, "kind": str(kind)}
+        if duration is not None:
+            event["duration"] = max(float(duration), 0.0)
+        interaction_events.append(event)
 
     for action in actions:
         action_type = action["type"]
@@ -1031,10 +1196,12 @@ def run_actions(
             continue
 
         if action_type == "scroll":
+            scroll_duration_seconds = float(action["duration_seconds"])
+            track_interaction("scroll", duration=scroll_duration_seconds)
             smooth_scroll(
                 page,
                 pixels=int(action["pixels"]),
-                duration_seconds=float(action["duration_seconds"]),
+                duration_seconds=scroll_duration_seconds,
                 steps=int(action["steps"]),
             )
             continue
@@ -1095,6 +1262,7 @@ def run_actions(
             if delay_ms > 0:
                 page.wait_for_timeout(delay_ms)
             try:
+                track_interaction("click")
                 page.click(selector, timeout=timeout_ms)
             except PlaywrightTimeoutError:
                 if not optional:
@@ -1127,8 +1295,8 @@ def record_actions_to_webm(
     headless: bool,
     show_mouse_overlay: bool,
     pre_click_delay_seconds: float,
-) -> tuple[Path, list[dict[str, float | str]]]:
-    def _record_once() -> tuple[Path, list[dict[str, float | str]]]:
+) -> tuple[Path, list[dict[str, float | str]], list[dict[str, float | str]]]:
+    def _record_once() -> tuple[Path, list[dict[str, float | str]], list[dict[str, float | str]]]:
         with tempfile.TemporaryDirectory(prefix="browser-video-") as tmpdir:
             output_dir = Path(tmpdir)
             from playwright.sync_api import sync_playwright
@@ -1142,6 +1310,7 @@ def record_actions_to_webm(
                 )
                 page = context.new_page()
                 cursor_events: list[dict[str, float | str]] = []
+                interaction_events: list[dict[str, float | str]] = []
                 action_start = time.monotonic()
                 run_actions(
                     page,
@@ -1150,6 +1319,7 @@ def record_actions_to_webm(
                     show_mouse_overlay=show_mouse_overlay,
                     pre_click_delay_seconds=pre_click_delay_seconds,
                     cursor_events=cursor_events,
+                    interaction_events=interaction_events,
                     time_origin=action_start,
                 )
                 page.wait_for_timeout(300)
@@ -1165,7 +1335,7 @@ def record_actions_to_webm(
                 shutil.copy2(recorded, final_webm)
                 temp_copy = Path(tempfile.gettempdir()) / f"browser-video-{int(time.time() * 1000)}.webm"
                 shutil.copy2(final_webm, temp_copy)
-                return temp_copy, cursor_events
+                return temp_copy, cursor_events, interaction_events
 
     try:
         return _record_once()
@@ -1209,16 +1379,17 @@ def build_process_actions(pages: list[str]) -> list[dict]:
         lesson_pages = pages
 
     for page in lesson_pages:
-        actions.append({"type": "goto", "path": page, "wait_seconds": 0.55})
+        actions.append({"type": "goto", "path": page, "wait_seconds": 1.00})
         actions.append(
             {
                 "type": "focus",
                 "selector": "#p1-outcomes",
                 "optional": True,
-                "wait_seconds": 0.85,
-                "zoom": 1.02,
+                "wait_seconds": 1.35,
+                "zoom": 1.015,
                 "padding": 14.0,
                 "dim_opacity": 0.16,
+                "post_wait_seconds": 0.26,
             }
         )
         actions.append(
@@ -1226,10 +1397,11 @@ def build_process_actions(pages: list[str]) -> list[dict]:
                 "type": "focus",
                 "selector": ".prompt-box",
                 "optional": True,
-                "wait_seconds": 1.05,
-                "zoom": 1.04,
+                "wait_seconds": 1.80,
+                "zoom": 1.03,
                 "padding": 16.0,
                 "dim_opacity": 0.18,
+                "post_wait_seconds": 0.28,
             }
         )
         actions.append(
@@ -1237,7 +1409,7 @@ def build_process_actions(pages: list[str]) -> list[dict]:
                 "type": "click",
                 "selector": ".prompt-box .copy-btn",
                 "optional": True,
-                "wait_seconds": 0.28,
+                "wait_seconds": 0.52,
                 "timeout_ms": 1800,
             }
         )
@@ -1246,10 +1418,11 @@ def build_process_actions(pages: list[str]) -> list[dict]:
                 "type": "focus",
                 "selector": ".task-box",
                 "optional": True,
-                "wait_seconds": 0.9,
-                "zoom": 1.03,
+                "wait_seconds": 1.40,
+                "zoom": 1.02,
                 "padding": 16.0,
                 "dim_opacity": 0.17,
+                "post_wait_seconds": 0.26,
             }
         )
         actions.append(
@@ -1257,14 +1430,15 @@ def build_process_actions(pages: list[str]) -> list[dict]:
                 "type": "focus",
                 "selector": ".checkpoint",
                 "optional": True,
-                "wait_seconds": 1.0,
-                "zoom": 1.03,
+                "wait_seconds": 1.45,
+                "zoom": 1.02,
                 "padding": 16.0,
                 "dim_opacity": 0.16,
+                "post_wait_seconds": 0.32,
             }
         )
-        actions.append({"type": "wait", "seconds": 0.3})
-    actions.append({"type": "wait", "seconds": 0.9})
+        actions.append({"type": "wait", "seconds": 0.65})
+    actions.append({"type": "wait", "seconds": 1.25})
     return actions
 
 
@@ -1447,9 +1621,11 @@ def create_video_from_actions(
     actions: list[dict],
     output_path: Path,
     args: argparse.Namespace,
+    *,
+    include_background_music: bool = False,
 ) -> dict[str, float | int | bool]:
     capture_start = time.perf_counter()
-    webm_path, cursor_events = record_actions_to_webm(
+    webm_path, _cursor_events, interaction_events = record_actions_to_webm(
         base_url=base_url,
         actions=actions,
         width=args.width,
@@ -1471,10 +1647,21 @@ def create_video_from_actions(
         transcode_start = time.perf_counter()
         transcode_webm_to_mp4(ffmpeg_exe=ffmpeg_exe, source_webm=webm_path, target_mp4=output_path, fps=args.fps)
         transcode_seconds = time.perf_counter() - transcode_start
-        if args.show_mouse_overlay:
-            overlay_start = time.perf_counter()
-            annotate_cursor_on_mp4(ffmpeg_exe=ffmpeg_exe, video_path=output_path, cursor_events=cursor_events, fps=args.fps)
-            overlay_seconds = time.perf_counter() - overlay_start
+        effect_start = time.perf_counter()
+        interaction_audio_path = Path(tempfile.gettempdir()) / f"browser-audio-{int(time.time() * 1000)}.wav"
+        try:
+            duration_seconds = probe_video_duration_seconds(output_path)
+            synthesize_interaction_audio(
+                interaction_audio_path,
+                duration_seconds=duration_seconds,
+                interaction_events=interaction_events,
+                include_background_music=include_background_music,
+            )
+            mux_audio_into_mp4(ffmpeg_exe=ffmpeg_exe, video_path=output_path, audio_path=interaction_audio_path)
+        finally:
+            if interaction_audio_path.exists():
+                interaction_audio_path.unlink()
+        overlay_seconds = time.perf_counter() - effect_start
         post_processing_seconds = time.perf_counter() - post_start
     finally:
         if webm_path.exists():
@@ -1523,7 +1710,13 @@ def run_site_videos(args: argparse.Namespace) -> list[Path]:
             process_output = media_dir / "learning-process-fast.mp4"
             print(f"Recording learning process video to: {process_output}")
             process_actions = build_process_actions(pages)
-            process_perf = create_video_from_actions(base_url, process_actions, process_output, args)
+            process_perf = create_video_from_actions(
+                base_url,
+                process_actions,
+                process_output,
+                args,
+                include_background_music=True,
+            )
             outputs.append(process_output)
             process_directives, process_story = write_video_sidecars(
                 video_path=process_output,
@@ -1540,6 +1733,7 @@ def run_site_videos(args: argparse.Namespace) -> list[Path]:
                     "Target viewer should feel how Codex is used as a practical learning accelerator.",
                     "Prompt copy interactions are included to reinforce actionable usage, not passive reading.",
                     "Checkpoint sections are shown without revealing answers to preserve learner reflection.",
+                    "Audio includes a subtle elevator-music bed plus click/scroll interaction cues.",
                 ],
             )
             outputs.extend([process_directives, process_story])

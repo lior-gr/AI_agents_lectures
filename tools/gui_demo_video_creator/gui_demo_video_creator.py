@@ -5,11 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+import wave
+from array import array
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -227,6 +230,9 @@ def write_video_sidecars(
         f"- Wait after typing before submit: `{max(float(args.post_type_wait_seconds), 0.0):.2f}` seconds",
         f"- Wait between goals: `{max(float(args.between_goals_wait_seconds), 0.0):.2f}` seconds",
         "- Mouse cue style: non-occluding translucent/hollow markers with click pulse rings",
+        "- Typing audio: pleasant keyboard keystroke sounds synchronized to goal-input characters",
+        "- Logger audio: soft tick sound when progress rows are appended",
+        "- Click audio: soft click sound when submit is clicked",
         "",
         "## Goal Script",
     ]
@@ -520,6 +526,13 @@ class DemoDirector:
         self.mouse_y = 24.0
         self.mouse_visible = True
         self.click_highlight_until = 0.0
+        self.last_event_scan_time_seconds = 0.0
+        self.keypress_times_seconds: list[float] = []
+        self.log_event_times_seconds: list[float] = []
+        self.click_times_seconds: list[float] = []
+        self.last_goal_input_length = 0
+        self.last_progress_row_count = 0
+        self.pending_click_sound_count = 0
 
         self.capture_timer = QTimer()
         self.capture_timer.timeout.connect(self._capture_frame)
@@ -585,6 +598,7 @@ class DemoDirector:
         if self.finished:
             return
         self.window.submit_btn.click()
+        self.pending_click_sound_count += 1
         self.completion_timer.start(200)
 
     def _poll_completion(self) -> None:
@@ -606,6 +620,8 @@ class DemoDirector:
         self._single_shot(wait_ms, self._begin_goal)
 
     def _capture_frame(self) -> None:
+        current_time_seconds = self.frame_index / float(self.args.fps)
+        self._capture_audio_event_times(current_time_seconds)
         pixmap = self.window.grab()
         self._draw_mouse_overlay(pixmap)
         frame_path = self.frames_dir / f"frame_{self.frame_index:06d}.png"
@@ -665,18 +681,162 @@ class DemoDirector:
         self._capture_frame()
         self.app.quit()
 
+    def _capture_audio_event_times(self, current_time_seconds: float) -> None:
+        start_time = max(self.last_event_scan_time_seconds, 0.0)
+        end_time = max(current_time_seconds, start_time)
+        span = max(end_time - start_time, 1e-6)
 
-def encode_video(ffmpeg_exe: str, frames_dir: Path, fps: int, output_path: Path) -> None:
+        current_goal_len = len(self.window.goal_input.text())
+        if current_goal_len < self.last_goal_input_length:
+            self.last_goal_input_length = current_goal_len
+        new_chars = current_goal_len - self.last_goal_input_length
+        if new_chars > 0:
+            for index in range(new_chars):
+                fraction = (index + 1) / float(new_chars + 1)
+                self.keypress_times_seconds.append(start_time + span * fraction)
+            self.last_goal_input_length = current_goal_len
+
+        current_rows = self.window.progress_table.rowCount()
+        if current_rows < self.last_progress_row_count:
+            self.last_progress_row_count = current_rows
+        new_rows = current_rows - self.last_progress_row_count
+        if new_rows > 0:
+            for index in range(new_rows):
+                fraction = (index + 1) / float(new_rows + 1)
+                self.log_event_times_seconds.append(start_time + span * fraction)
+            self.last_progress_row_count = current_rows
+
+        if self.pending_click_sound_count > 0:
+            for index in range(self.pending_click_sound_count):
+                fraction = (index + 1) / float(self.pending_click_sound_count + 1)
+                self.click_times_seconds.append(start_time + span * fraction)
+            self.pending_click_sound_count = 0
+
+        self.last_event_scan_time_seconds = end_time
+
+
+def synthesize_interaction_audio(
+    audio_path: Path,
+    *,
+    duration_seconds: float,
+    keypress_times_seconds: list[float],
+    log_event_times_seconds: list[float],
+    click_times_seconds: list[float],
+    sample_rate: int = 48000,
+) -> None:
+    total_samples = max(int(math.ceil(max(duration_seconds, 0.0) * sample_rate)), 1)
+    mix = array("f", [0.0]) * total_samples
+
+    def add_burst(
+        event_time: float,
+        *,
+        event_index: int,
+        duration: float,
+        amplitude: float,
+        decay: float,
+        freq_a: float,
+        freq_b: float,
+        tonal_mix: float,
+        noise_mix: float,
+        phase_seed: float,
+    ) -> None:
+        start_sample = int(max(event_time, 0.0) * sample_rate)
+        if start_sample >= total_samples:
+            return
+        burst_samples = max(int(sample_rate * duration), 1)
+        phase = phase_seed * float((event_index % 11) + 1)
+        for n in range(burst_samples):
+            sample_index = start_sample + n
+            if sample_index >= total_samples:
+                break
+            t = n / float(sample_rate)
+            envelope = math.exp(-decay * t)
+            tonal = (
+                tonal_mix * math.sin(2.0 * math.pi * freq_a * t + phase)
+                + (1.0 - tonal_mix) * math.sin(2.0 * math.pi * freq_b * t + phase * 0.63)
+            )
+            noise_seed = math.sin((event_index + 3) * (n + 29) * 12.9898) * 43758.5453
+            noise = (noise_seed - math.floor(noise_seed)) * 2.0 - 1.0
+            sample_value = ((1.0 - noise_mix) * tonal + noise_mix * noise) * envelope * amplitude
+            mix[sample_index] += sample_value
+
+    for event_index, event_time in enumerate(keypress_times_seconds):
+        add_burst(
+            event_time,
+            event_index=event_index,
+            duration=0.050,
+            amplitude=0.070,
+            decay=57.0,
+            freq_a=1580.0 + float((event_index % 5) * 62),
+            freq_b=1040.0 + float((event_index % 4) * 47),
+            tonal_mix=0.72,
+            noise_mix=0.12,
+            phase_seed=0.31,
+        )
+
+    for event_index, event_time in enumerate(log_event_times_seconds):
+        add_burst(
+            event_time,
+            event_index=event_index,
+            duration=0.045,
+            amplitude=0.040,
+            decay=72.0,
+            freq_a=760.0 + float((event_index % 4) * 24),
+            freq_b=1180.0 + float((event_index % 3) * 31),
+            tonal_mix=0.66,
+            noise_mix=0.08,
+            phase_seed=0.22,
+        )
+
+    for event_index, event_time in enumerate(click_times_seconds):
+        add_burst(
+            event_time,
+            event_index=event_index,
+            duration=0.085,
+            amplitude=0.090,
+            decay=46.0,
+            freq_a=640.0 + float((event_index % 2) * 28),
+            freq_b=1760.0 + float((event_index % 3) * 54),
+            tonal_mix=0.58,
+            noise_mix=0.18,
+            phase_seed=0.41,
+        )
+
+    peak = max((abs(value) for value in mix), default=0.0)
+    gain = 0.82 / peak if peak > 0.82 else 1.0
+    pcm_samples = array("h")
+    for value in mix:
+        clamped = max(-1.0, min(1.0, value * gain))
+        pcm_samples.append(int(round(clamped * 32767.0)))
+
+    audio_path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(audio_path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(sample_rate)
+        wav.writeframes(pcm_samples.tobytes())
+
+
+def encode_video(
+    ffmpeg_exe: str,
+    frames_dir: Path,
+    fps: int,
+    output_path: Path,
+    audio_track_path: Path | None = None,
+) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pattern = str(frames_dir / "frame_%06d.png")
-    run_ffmpeg(
-        ffmpeg_exe,
+    ffmpeg_args = [
+        "-y",
+        "-framerate",
+        str(fps),
+        "-i",
+        pattern,
+    ]
+    if audio_track_path is not None and audio_track_path.exists():
+        ffmpeg_args.extend(["-i", str(audio_track_path)])
+    ffmpeg_args.extend(
         [
-            "-y",
-            "-framerate",
-            str(fps),
-            "-i",
-            pattern,
             "-c:v",
             "libx264",
             "-preset",
@@ -685,11 +845,22 @@ def encode_video(ffmpeg_exe: str, frames_dir: Path, fps: int, output_path: Path)
             "20",
             "-pix_fmt",
             "yuv420p",
-            "-movflags",
-            "+faststart",
-            str(output_path),
-        ],
+        ]
     )
+    if audio_track_path is not None and audio_track_path.exists():
+        ffmpeg_args.extend(
+            [
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-ar",
+                "48000",
+                "-shortest",
+            ]
+        )
+    ffmpeg_args.extend(["-movflags", "+faststart", str(output_path)])
+    run_ffmpeg(ffmpeg_exe, ffmpeg_args)
 
 
 def run_demo(args: argparse.Namespace) -> list[Path]:
@@ -733,10 +904,26 @@ def run_demo(args: argparse.Namespace) -> list[Path]:
         if frame_count < 2:
             raise RuntimeError("Frame capture failed; not enough frames were generated.")
 
+        video_duration_seconds = frame_count / float(args.fps)
+        interaction_audio_path = temp_dir / "interaction_audio.wav"
+        synthesize_interaction_audio(
+            interaction_audio_path,
+            duration_seconds=video_duration_seconds,
+            keypress_times_seconds=director.keypress_times_seconds,
+            log_event_times_seconds=director.log_event_times_seconds,
+            click_times_seconds=director.click_times_seconds,
+        )
+
         ffmpeg_exe = resolve_ffmpeg(args.ffmpeg_path)
         post_start = time.perf_counter()
         transcode_start = time.perf_counter()
-        encode_video(ffmpeg_exe=ffmpeg_exe, frames_dir=frames_dir, fps=args.fps, output_path=output_path)
+        encode_video(
+            ffmpeg_exe=ffmpeg_exe,
+            frames_dir=frames_dir,
+            fps=args.fps,
+            output_path=output_path,
+            audio_track_path=interaction_audio_path,
+        )
         transcode_seconds = time.perf_counter() - transcode_start
         post_processing_seconds = time.perf_counter() - post_start
 
