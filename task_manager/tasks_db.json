@@ -1,0 +1,27 @@
+[
+  {
+    "id": 1,
+    "text": "Research flights to Haifa, Israel.",
+    "completed": false
+  },
+  {
+    "id": 2,
+    "text": "Book accommodation in Haifa.",
+    "completed": false
+  },
+  {
+    "id": 3,
+    "text": "Create an itinerary for sightseeing in Haifa.",
+    "completed": false
+  },
+  {
+    "id": 4,
+    "text": "Check local transportation options in Haifa.",
+    "completed": false
+  },
+  {
+    "id": 5,
+    "text": "Pack necessary items for the trip.",
+    "completed": false
+  }
+]
