@@ -51,6 +51,20 @@ _EVENT_COLORS = {
     "lifecycle": QColor("#ede9fe") if QApplication else None,
 }
 
+_TOOL_EVENT_COLORS = {
+    # Same green base family, split into request/response shades.
+    "tool_called": QColor("#d9f99d") if QApplication else None,
+    "tool_result": QColor("#bef264") if QApplication else None,
+}
+
+
+def _resolve_event_color(event: dict[str, Any]) -> QColor | None:
+    event_type = str(event.get("type", "")).lower()
+    if event_type != "tool":
+        return _EVENT_COLORS.get(event_type)
+    event_name = str(event.get("name", "")).lower()
+    return _TOOL_EVENT_COLORS.get(event_name, _EVENT_COLORS.get("tool"))
+
 
 if QApplication is not None:
 
@@ -253,7 +267,7 @@ if QApplication is not None:
                 str(event.get("details", "")),
             ]
 
-            color = _EVENT_COLORS.get(str(event.get("type", "")).lower())
+            color = _resolve_event_color(event)
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 if color is not None:

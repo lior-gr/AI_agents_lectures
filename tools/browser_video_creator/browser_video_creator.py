@@ -166,6 +166,19 @@ def tool_schema() -> dict:
                 "default": False,
                 "description": "Show browser window while recording (headless is default).",
             },
+            "show-mouse-overlay": {
+                "type": "boolean",
+                "required": False,
+                "default": True,
+                "description": "Render an in-page mouse cursor overlay in recorded videos.",
+            },
+            "pre-click-delay-seconds": {
+                "type": "number",
+                "required": False,
+                "default": 1.0,
+                "minimum": 0.0,
+                "description": "Delay before executing click actions, after highlighting the click target.",
+            },
             "ffmpeg-path": {
                 "type": "string",
                 "required": False,
@@ -231,6 +244,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--browser", choices=["auto", "chrome", "edge"], default="auto")
     parser.add_argument("--browser-path", default="")
     parser.add_argument("--show-browser", action="store_true")
+    parser.add_argument("--show-mouse-overlay", action="store_true", default=True)
+    parser.add_argument("--hide-mouse-overlay", dest="show_mouse_overlay", action="store_false")
+    parser.add_argument("--pre-click-delay-seconds", type=float, default=1.0)
     parser.add_argument("--ffmpeg-path", default="")
     parser.add_argument("--generate-fallback-copies", action="store_true")
     parser.add_argument("--print-schema", action="store_true")
@@ -300,6 +316,107 @@ def transcode_webm_to_mp4(ffmpeg_exe: str, source_webm: Path, target_mp4: Path, 
             str(target_mp4),
         ],
     )
+
+
+def probe_video_duration_seconds(video_path: Path) -> float:
+    try:
+        import imageio_ffmpeg
+
+        _frames, seconds = imageio_ffmpeg.count_frames_and_secs(str(video_path))
+        return float(seconds)
+    except Exception as exc:  # pragma: no cover - dependency/runtime specific.
+        raise RuntimeError(f"Could not read video duration for: {video_path}") from exc
+
+
+def build_cursor_overlay_filter(cursor_events: list[dict[str, float | str]], duration_seconds: float) -> str:
+    if duration_seconds <= 0.0:
+        return ""
+
+    points = [event for event in cursor_events if "x" in event and "y" in event and "t" in event]
+    if not points:
+        return ""
+
+    filters: list[str] = []
+    for index, event in enumerate(points):
+        start = max(float(event["t"]), 0.0)
+        next_time = duration_seconds
+        if index + 1 < len(points):
+            next_time = max(float(points[index + 1]["t"]), start + 0.03)
+        end = min(next_time, duration_seconds)
+        if end <= start:
+            continue
+
+        x = int(round(float(event["x"])))
+        y = int(round(float(event["y"])))
+        enable = f"between(t\\,{start:.3f}\\,{end:.3f})"
+        filters.append(
+            "drawbox="
+            f"x={x - 11}:y={y - 11}:w=22:h=22:color=black@0.58:t=2:enable={enable}"
+        )
+        filters.append(
+            "drawbox="
+            f"x={x - 8}:y={y - 8}:w=16:h=16:color=yellow@0.72:t=2:enable={enable}"
+        )
+
+    for event in points:
+        if str(event.get("kind", "")) != "click":
+            continue
+        click_start = max(float(event["t"]), 0.0)
+        click_end = min(click_start + 0.55, duration_seconds)
+        if click_end <= click_start:
+            continue
+
+        x = int(round(float(event["x"])))
+        y = int(round(float(event["y"])))
+        enable = f"between(t\\,{click_start:.3f}\\,{click_end:.3f})"
+        filters.append(
+            "drawbox="
+            f"x={x - 30}:y={y - 30}:w=60:h=60:color=red@0.38:t=3:enable={enable}"
+        )
+
+    return ",".join(filters)
+
+
+def annotate_cursor_on_mp4(
+    ffmpeg_exe: str,
+    video_path: Path,
+    cursor_events: list[dict[str, float | str]],
+    fps: int,
+) -> None:
+    if not cursor_events:
+        return
+
+    duration_seconds = probe_video_duration_seconds(video_path)
+    filter_value = build_cursor_overlay_filter(cursor_events, duration_seconds=duration_seconds)
+    if not filter_value:
+        return
+
+    temp_output = video_path.with_name(f"{video_path.stem}.cursor.tmp.mp4")
+    run_ffmpeg(
+        ffmpeg_exe,
+        [
+            "-y",
+            "-i",
+            str(video_path),
+            "-vf",
+            filter_value,
+            "-r",
+            str(fps),
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "21",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-an",
+            str(temp_output),
+        ],
+    )
+    shutil.move(str(temp_output), str(video_path))
 
 
 class QuietHandler(SimpleHTTPRequestHandler):
@@ -421,14 +538,108 @@ def smooth_scroll(page, pixels: int, duration_seconds: float, steps: int) -> Non
         page.wait_for_timeout(int(delay * 1000))
 
 
-def run_actions(page, base_url: str, actions: list[dict]) -> None:
+def ensure_mouse_overlay(page) -> None:
+    page.evaluate(
+        """() => {
+            const id = "__demo_mouse_overlay__";
+            if (window.__demoMouseMove && document.getElementById(id)) {
+                return;
+            }
+            const cursor = document.createElement("div");
+            cursor.id = id;
+            cursor.style.position = "fixed";
+            cursor.style.left = "0";
+            cursor.style.top = "0";
+            cursor.style.width = "22px";
+            cursor.style.height = "22px";
+            cursor.style.border = "2px solid rgba(0,0,0,0.62)";
+            cursor.style.borderRadius = "50%";
+            cursor.style.background = "transparent";
+            cursor.style.boxSizing = "border-box";
+            cursor.style.pointerEvents = "none";
+            cursor.style.zIndex = "2147483647";
+            cursor.style.boxShadow = "0 0 0 1px rgba(255,230,0,0.65)";
+            cursor.style.transform = "translate(48px, 48px)";
+            cursor.style.transition = "transform 160ms linear";
+            document.body.appendChild(cursor);
+
+            const ring = document.createElement("div");
+            ring.style.position = "fixed";
+            ring.style.left = "0";
+            ring.style.top = "0";
+            ring.style.width = "58px";
+            ring.style.height = "58px";
+            ring.style.border = "3px solid rgba(255,60,60,0.40)";
+            ring.style.borderRadius = "50%";
+            ring.style.pointerEvents = "none";
+            ring.style.zIndex = "2147483647";
+            ring.style.opacity = "0";
+            ring.style.transform = "translate(31px, 31px) scale(0.74)";
+            ring.style.transition = "opacity 120ms linear, transform 320ms ease-out";
+            document.body.appendChild(ring);
+
+            window.__demoMouseMove = (x, y) => {
+                cursor.style.transform = `translate(${x}px, ${y}px)`;
+                ring.style.transform = `translate(${x - 17}px, ${y - 17}px) scale(0.74)`;
+            };
+
+            window.__demoMouseClick = () => {
+                ring.style.opacity = "1";
+                ring.style.transform = ring.style.transform.replace("scale(0.74)", "scale(1.16)");
+                setTimeout(() => {
+                    ring.style.opacity = "0";
+                    ring.style.transform = ring.style.transform.replace("scale(1.16)", "scale(0.74)");
+                }, 520);
+            };
+        }"""
+    )
+
+
+def move_mouse_to_selector(page, selector: str, timeout_ms: int) -> tuple[float, float] | None:
     from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    try:
+        box = page.locator(selector).first.bounding_box(timeout=timeout_ms)
+    except PlaywrightTimeoutError:
+        return None
+    if box is None:
+        return None
+    center_x = float(box["x"]) + float(box["width"]) / 2.0
+    center_y = float(box["y"]) + float(box["height"]) / 2.0
+    page.evaluate("([x, y]) => window.__demoMouseMove?.(x, y)", [center_x, center_y])
+    return center_x, center_y
+
+
+def run_actions(
+    page,
+    base_url: str,
+    actions: list[dict],
+    *,
+    show_mouse_overlay: bool,
+    pre_click_delay_seconds: float,
+    cursor_events: list[dict[str, float | str]] | None = None,
+    time_origin: float | None = None,
+) -> None:
+    from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+    def track_cursor(x: float, y: float, kind: str = "move") -> None:
+        if cursor_events is None:
+            return
+        if time_origin is None:
+            timestamp = 0.0
+        else:
+            timestamp = max(time.monotonic() - time_origin, 0.0)
+        cursor_events.append({"t": timestamp, "x": float(x), "y": float(y), "kind": kind})
 
     for action in actions:
         action_type = action["type"]
         if action_type == "goto":
             target = action["path"]
             page.goto(urljoin(base_url, target), wait_until="networkidle")
+            if show_mouse_overlay:
+                ensure_mouse_overlay(page)
+                page.evaluate("() => window.__demoMouseMove?.(56, 56)")
+                track_cursor(56.0, 56.0, kind="move")
             wait_ms = int(action.get("wait_seconds", 0) * 1000)
             if wait_ms > 0:
                 page.wait_for_timeout(wait_ms)
@@ -451,6 +662,20 @@ def run_actions(page, base_url: str, actions: list[dict]) -> None:
             selector = action["selector"]
             optional = bool(action.get("optional", False))
             timeout_ms = int(action.get("timeout_ms", 2000))
+            has_target = True
+            if show_mouse_overlay:
+                ensure_mouse_overlay(page)
+                target_pos = move_mouse_to_selector(page, selector=selector, timeout_ms=timeout_ms)
+                has_target = target_pos is not None
+                if target_pos is not None:
+                    track_cursor(target_pos[0], target_pos[1], kind="move")
+                    page.evaluate("() => window.__demoMouseClick?.()")
+                    track_cursor(target_pos[0], target_pos[1], kind="click")
+            if not has_target and optional:
+                continue
+            delay_ms = int(max(pre_click_delay_seconds, 0.0) * 1000)
+            if delay_ms > 0:
+                page.wait_for_timeout(delay_ms)
             try:
                 page.click(selector, timeout=timeout_ms)
             except PlaywrightTimeoutError:
@@ -482,8 +707,10 @@ def record_actions_to_webm(
     browser: str,
     browser_path: str,
     headless: bool,
-) -> Path:
-    def _record_once() -> Path:
+    show_mouse_overlay: bool,
+    pre_click_delay_seconds: float,
+) -> tuple[Path, list[dict[str, float | str]]]:
+    def _record_once() -> tuple[Path, list[dict[str, float | str]]]:
         with tempfile.TemporaryDirectory(prefix="browser-video-") as tmpdir:
             output_dir = Path(tmpdir)
             from playwright.sync_api import sync_playwright
@@ -496,7 +723,17 @@ def record_actions_to_webm(
                     record_video_size={"width": width, "height": height},
                 )
                 page = context.new_page()
-                run_actions(page, base_url=base_url, actions=actions)
+                cursor_events: list[dict[str, float | str]] = []
+                action_start = time.monotonic()
+                run_actions(
+                    page,
+                    base_url=base_url,
+                    actions=actions,
+                    show_mouse_overlay=show_mouse_overlay,
+                    pre_click_delay_seconds=pre_click_delay_seconds,
+                    cursor_events=cursor_events,
+                    time_origin=action_start,
+                )
                 page.wait_for_timeout(300)
                 video_handle = page.video
                 context.close()
@@ -510,7 +747,7 @@ def record_actions_to_webm(
                 shutil.copy2(recorded, final_webm)
                 temp_copy = Path(tempfile.gettempdir()) / f"browser-video-{int(time.time() * 1000)}.webm"
                 shutil.copy2(final_webm, temp_copy)
-                return temp_copy
+                return temp_copy, cursor_events
 
     try:
         return _record_once()
@@ -745,7 +982,7 @@ def create_video_from_actions(
     output_path: Path,
     args: argparse.Namespace,
 ) -> None:
-    webm_path = record_actions_to_webm(
+    webm_path, cursor_events = record_actions_to_webm(
         base_url=base_url,
         actions=actions,
         width=args.width,
@@ -753,10 +990,14 @@ def create_video_from_actions(
         browser=args.browser,
         browser_path=args.browser_path,
         headless=not args.show_browser,
+        show_mouse_overlay=args.show_mouse_overlay,
+        pre_click_delay_seconds=max(float(args.pre_click_delay_seconds), 0.0),
     )
     try:
         ffmpeg_exe = resolve_ffmpeg(args.ffmpeg_path)
         transcode_webm_to_mp4(ffmpeg_exe=ffmpeg_exe, source_webm=webm_path, target_mp4=output_path, fps=args.fps)
+        if args.show_mouse_overlay:
+            annotate_cursor_on_mp4(ffmpeg_exe=ffmpeg_exe, video_path=output_path, cursor_events=cursor_events, fps=args.fps)
     finally:
         if webm_path.exists():
             webm_path.unlink()

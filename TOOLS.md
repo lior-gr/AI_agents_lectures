@@ -146,7 +146,7 @@ powershell -ExecutionPolicy Bypass -File tools/tutorial_video_creator/run.ps1 --
 - Wrapper (Windows): `tools/browser_video_creator/run.ps1`
 - Wrapper (Linux/macOS): `tools/browser_video_creator/run.sh`
 - Python script: `tools/browser_video_creator/browser_video_creator.py`
-- Purpose: Generate real browser-recorded videos from local HTML pages, including concept slide decks and tutorial-site walkthrough clips.
+- Purpose: Generate real browser-recorded videos from local HTML pages, including concept slide decks and tutorial-site walkthrough clips with visible non-occluding mouse/click overlays.
 
 ### Invocation examples
 
@@ -157,6 +157,8 @@ powershell -ExecutionPolicy Bypass -File tools/browser_video_creator/run.ps1 `
   --mode site-videos `
   --output-mode both `
   --browser chrome `
+  --show-mouse-overlay `
+  --pre-click-delay-seconds 1 `
   --generate-fallback-copies
 ```
 
@@ -283,6 +285,15 @@ powershell -ExecutionPolicy Bypass -File tools/browser_video_creator/run.ps1 --p
       "type": "boolean",
       "default": false
     },
+    "show-mouse-overlay": {
+      "type": "boolean",
+      "default": true
+    },
+    "pre-click-delay-seconds": {
+      "type": "number",
+      "minimum": 0.0,
+      "default": 1.0
+    },
     "ffmpeg-path": {
       "type": "string",
       "default": ""
@@ -307,6 +318,77 @@ powershell -ExecutionPolicy Bypass -File tools/browser_video_creator/run.ps1 --p
 - `learning-process-fast-fallback.mp4` (optional copy)
 - custom tour output (html-tour mode)
 - custom slideshow output (concept-slideshow mode)
+
+## Tool: `gui_demo_video_creator`
+
+- Wrapper (Windows): `tools/gui_demo_video_creator/run.ps1`
+- Wrapper (Linux/macOS): `tools/gui_demo_video_creator/run.sh`
+- Python script: `tools/gui_demo_video_creator/gui_demo_video_creator.py`
+- Purpose: Launch the real `task_manager` PySide6 GUI, simulate directed user interactions with fixed character-rate typing, visible non-occluding mouse cursor cues, click highlights, and render an outcome video showing agent progress/logging and aligned ASCII-table results.
+
+### Invocation examples
+
+Generate tutorial outcome video (with fallback copy):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/gui_demo_video_creator/run.ps1 `
+  --output "Lessons/tutorial_site/media/tutorial-outcome.mp4" `
+  --fallback-output "Lessons/tutorial_site/media/tutorial-outcome-fallback.mp4"
+```
+
+Adjust directing pace:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/gui_demo_video_creator/run.ps1 `
+  --type-words-per-second 3 `
+  --avg-chars-per-word 5 `
+  --pre-click-delay-seconds 1 `
+  --post-type-wait-seconds 3 `
+  --between-goals-wait-seconds 5
+```
+
+Print machine-readable schema:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/gui_demo_video_creator/run.ps1 --print-schema
+```
+
+### Input schema
+
+```json
+{
+  "tool": "gui_demo_video_creator",
+  "entrypoints": {
+    "windows": "tools/gui_demo_video_creator/run.ps1",
+    "unix": "tools/gui_demo_video_creator/run.sh",
+    "python": "tools/gui_demo_video_creator/gui_demo_video_creator.py"
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "output": { "type": "string", "default": "Lessons/tutorial_site/media/tutorial-outcome.mp4" },
+    "fallback-output": { "type": "string", "default": "Lessons/tutorial_site/media/tutorial-outcome-fallback.mp4" },
+    "generate-fallback-copy": { "type": "boolean", "default": true },
+    "width": { "type": "integer", "default": 1366, "minimum": 900 },
+    "height": { "type": "integer", "default": 820, "minimum": 600 },
+    "fps": { "type": "integer", "default": 12, "minimum": 6 },
+    "type-words-per-second": { "type": "number", "default": 3.0, "minimum": 0.5 },
+    "avg-chars-per-word": { "type": "number", "default": 5.0, "minimum": 1.0 },
+    "pre-click-delay-seconds": { "type": "number", "default": 1.0, "minimum": 0.0 },
+    "post-type-wait-seconds": { "type": "number", "default": 3.0, "minimum": 0.0 },
+    "between-goals-wait-seconds": { "type": "number", "default": 5.0, "minimum": 0.0 },
+    "ffmpeg-path": { "type": "string", "default": "" },
+    "max-demo-seconds": { "type": "integer", "default": 240, "minimum": 30 },
+    "print-schema": { "type": "boolean", "default": false }
+  }
+}
+```
+
+### Output artifacts
+
+- `tutorial-outcome.mp4` (default)
+- `tutorial-outcome-fallback.mp4` (optional copy)
 
 ## Tool: `registry_bootstrapper`
 
