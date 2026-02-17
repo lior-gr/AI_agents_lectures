@@ -32,6 +32,91 @@
 
     <section class="card">
       <div class="card-head">
+        <h3><span class="marker">Preview</span> Watch before you start</h3>
+        <p>Two short clips: the final outcome and the VS Code + Codex learning loop.</p>
+      </div>
+      <div class="card-body">
+        <div class="showcase" data-showcase>
+          <div class="showcase-tabs" role="tablist" aria-label="Preview videos">
+            <button
+              class="showcase-tab"
+              type="button"
+              role="tab"
+              id="showcase-tab-process"
+              aria-selected="false"
+              aria-controls="showcase-process"
+              data-showcase-target="process"
+              tabindex="-1"
+            >
+              Learning process
+            </button>
+            <button
+              class="showcase-tab is-active"
+              type="button"
+              role="tab"
+              id="showcase-tab-outcome"
+              aria-selected="true"
+              aria-controls="showcase-outcome"
+              data-showcase-target="outcome"
+            >
+              Tutorial outcome
+            </button>
+          </div>
+
+          <div class="showcase-frame">
+            <article class="showcase-slide is-active" data-showcase-id="outcome" id="showcase-outcome" role="tabpanel" aria-labelledby="showcase-tab-outcome">
+              <div class="showcase-copy">
+                <h4>What this repository actually builds</h4>
+                <p>The clips reflect the implemented end-to-end app under <code>task_manager/</code>.</p>
+                <ul class="video-points">
+                  <li>Deterministic CLI task manager with JSON persistence.</li>
+                  <li>Bounded agent loop with tool-calling and structured progress events.</li>
+                  <li>MCP subprocess boundary for tool execution (client/server over JSON stdio).</li>
+                  <li>Skills integration (deterministic and bounded routing) without changing loop control.</li>
+                  <li>PySide6 UI that reuses shared backend entry points and shows live progress in table/tree views.</li>
+                </ul>
+              </div>
+              <div class="video-shell" data-video-shell>
+                <video class="learning-video" controls playsinline preload="metadata">
+                  <source src="media/tutorial-outcome.mp4" type="video/mp4">
+                  Your browser does not support HTML video.
+                </video>
+              </div>
+            </article>
+
+            <article class="showcase-slide" data-showcase-id="process" id="showcase-process" role="tabpanel" aria-labelledby="showcase-tab-process">
+              <div class="showcase-copy">
+                <h4>High-speed learning process (VS Code + Codex)</h4>
+                <p>This sequence matches the tutorial itself, without introducing any extra tools or UI.</p>
+                <ol class="fast-steps">
+                  <li>Read the lesson background and boundaries.</li>
+                  <li>Implement the concept in VS Code with Codex.</li>
+                  <li>Run and test the change.</li>
+                  <li>Review with checklist and checkpoint.</li>
+                  <li>Advance to the next lesson page.</li>
+                </ol>
+                <p class="small">No invented tooling: this sequence stays in VS Code + Codex + lesson pages.</p>
+              </div>
+              <div class="video-shell" data-video-shell>
+                <video class="learning-video" controls muted loop playsinline preload="metadata">
+                  <source src="media/learning-process-fast.mp4" type="video/mp4">
+                  Your browser does not support HTML video.
+                </video>
+              </div>
+            </article>
+          </div>
+
+          <div class="showcase-controls">
+            <button class="showcase-nav" type="button" data-showcase-nav="prev" aria-label="Show previous preview">Previous</button>
+            <p class="showcase-hint">Switch between clips before starting Lesson 0.</p>
+            <button class="showcase-nav" type="button" data-showcase-nav="next" aria-label="Show next preview">Next</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
         <h3><span class="marker">Flow</span> How to use each lesson page</h3>
         <p>No rushing. Read, run, review, reflect.</p>
       </div>
@@ -110,6 +195,8 @@
       </div>
     </section>
   </main>
+
+  <script src="app.js"></script>
 </body>
 </html>
 
