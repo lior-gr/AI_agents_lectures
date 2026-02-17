@@ -10,6 +10,9 @@ Define a stable project contract for when to render videos and which profile to 
 2. If the user asks to `commit`, `push`, or `commit and push`:
    - Evaluate current changes for rendering impact.
    - If rendering-impacting changes exist, render with `release` profile before commit/push.
+   - Use explicit tool flags:
+     - `tools/browser_video_creator/... --encode-profile release`
+     - `tools/gui_demo_video_creator/... --encode-profile release`
    - If no rendering-impacting changes exist, skip rendering.
 3. Do not render automatically for non-impacting changes.
 

@@ -90,12 +90,6 @@ def tool_schema() -> dict:
                 "default": False,
                 "description": "Generate synthetic source clips when source videos are missing.",
             },
-            "generate-fallback-copies": {
-                "type": "boolean",
-                "required": False,
-                "default": False,
-                "description": "Copy primary outputs to fallback file names used by the site.",
-            },
             "print-schema": {
                 "type": "boolean",
                 "required": False,
@@ -108,8 +102,6 @@ def tool_schema() -> dict:
             "learning-process-fast.mp4",
             "tutorial-outcome.webm (optional)",
             "learning-process-fast.webm (optional)",
-            "tutorial-outcome-fallback.mp4 (optional copy)",
-            "learning-process-fast-fallback.mp4 (optional copy)",
         ],
     }
 
@@ -130,7 +122,6 @@ def normalize_legacy_args(argv: list[str]) -> list[str]:
         "-FfmpegPath": "--ffmpeg-path",
         "-IncludeWebm": "--include-webm",
         "-CreateDemoPlaceholders": "--create-demo-placeholders",
-        "-GenerateFallbackCopies": "--generate-fallback-copies",
         "-PrintSchema": "--print-schema",
     }
 
@@ -138,7 +129,6 @@ def normalize_legacy_args(argv: list[str]) -> list[str]:
     bool_aliases = {
         "includewebm": "--include-webm",
         "createdemoplaceholders": "--create-demo-placeholders",
-        "generatefallbackcopies": "--generate-fallback-copies",
         "printschema": "--print-schema",
     }
     pattern = re.compile(r"^-([A-Za-z][A-Za-z0-9]*)\s*:\s*\$(true|false)$", re.IGNORECASE)
@@ -185,7 +175,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--ffmpeg-path", default="")
     parser.add_argument("--include-webm", action="store_true")
     parser.add_argument("--create-demo-placeholders", action="store_true")
-    parser.add_argument("--generate-fallback-copies", action="store_true")
     parser.add_argument("--print-schema", action="store_true")
     return parser.parse_args(normalize_legacy_args(argv))
 
@@ -382,8 +371,6 @@ def main(argv: list[str]) -> int:
     process_mp4 = media_dir / "learning-process-fast.mp4"
     outcome_webm = media_dir / "tutorial-outcome.webm"
     process_webm = media_dir / "learning-process-fast.webm"
-    outcome_fallback_mp4 = media_dir / "tutorial-outcome-fallback.mp4"
-    process_fallback_mp4 = media_dir / "learning-process-fast-fallback.mp4"
 
     speed_pts = 1.0 / args.process_speed
     print("Generating video files...")
@@ -470,13 +457,6 @@ def main(argv: list[str]) -> int:
                 ],
             )
 
-    if args.generate_fallback_copies:
-        print("Copying fallback MP4 files...")
-        if need_outcome and outcome_mp4.exists():
-            shutil.copyfile(outcome_mp4, outcome_fallback_mp4)
-        if need_process and process_mp4.exists():
-            shutil.copyfile(process_mp4, process_fallback_mp4)
-
     print("Done.")
     print("Expected site files:")
     if need_outcome:
@@ -487,10 +467,6 @@ def main(argv: list[str]) -> int:
         print(f" - {outcome_webm}")
     if args.include_webm and need_process:
         print(f" - {process_webm}")
-    if args.generate_fallback_copies and need_outcome:
-        print(f" - {outcome_fallback_mp4}")
-    if args.generate_fallback_copies and need_process:
-        print(f" - {process_fallback_mp4}")
     return 0
 
 

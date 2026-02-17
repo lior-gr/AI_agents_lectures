@@ -19,8 +19,19 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = PROJECT_ROOT / "Lessons" / "tutorial_site" / "media" / "tutorial-outcome.mp4"
-DEFAULT_FALLBACK = PROJECT_ROOT / "Lessons" / "tutorial_site" / "media" / "tutorial-outcome-fallback.mp4"
 TASK_MANAGER_DIR = PROJECT_ROOT / "task_manager"
+ENCODE_PROFILES: dict[str, dict[str, str]] = {
+    "draft": {
+        "video_preset": "veryfast",
+        "video_crf": "22",
+        "audio_bitrate": "96k",
+    },
+    "release": {
+        "video_preset": "medium",
+        "video_crf": "18",
+        "audio_bitrate": "128k",
+    },
+}
 
 
 def tool_schema() -> dict[str, Any]:
@@ -37,11 +48,10 @@ def tool_schema() -> dict[str, Any]:
         ),
         "arguments": {
             "output": {"type": "string", "default": str(DEFAULT_OUTPUT)},
-            "fallback-output": {"type": "string", "default": str(DEFAULT_FALLBACK)},
-            "generate-fallback-copy": {"type": "boolean", "default": True},
             "width": {"type": "integer", "default": 1366, "minimum": 900},
             "height": {"type": "integer", "default": 820, "minimum": 600},
             "fps": {"type": "integer", "default": 12, "minimum": 6},
+            "encode-profile": {"type": "string", "default": "draft", "enum": ["draft", "release"]},
             "type-words-per-second": {"type": "number", "default": 3.0, "minimum": 0.5},
             "avg-chars-per-word": {"type": "number", "default": 5.0, "minimum": 1.0},
             "pre-click-delay-seconds": {"type": "number", "default": 1.0, "minimum": 0.0},
@@ -68,15 +78,21 @@ def min_int(value: str, minimum: int, label: str) -> int:
     return parsed
 
 
+def encode_profile_settings(profile_name: str) -> dict[str, str]:
+    settings = ENCODE_PROFILES.get(profile_name)
+    if not settings:
+        valid = ", ".join(sorted(ENCODE_PROFILES.keys()))
+        raise RuntimeError(f"Unknown encode profile '{profile_name}'. Expected one of: {valid}")
+    return settings
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=tool_schema()["description"])
     parser.add_argument("--output", default=str(DEFAULT_OUTPUT))
-    parser.add_argument("--fallback-output", default=str(DEFAULT_FALLBACK))
-    parser.add_argument("--generate-fallback-copy", action="store_true", default=True)
-    parser.add_argument("--no-generate-fallback-copy", dest="generate_fallback_copy", action="store_false")
     parser.add_argument("--width", type=lambda v: min_int(v, 900, "width"), default=1366)
     parser.add_argument("--height", type=lambda v: min_int(v, 600, "height"), default=820)
     parser.add_argument("--fps", type=lambda v: min_int(v, 6, "fps"), default=12)
+    parser.add_argument("--encode-profile", choices=sorted(ENCODE_PROFILES.keys()), default="draft")
     parser.add_argument("--type-words-per-second", type=positive_float, default=3.0)
     parser.add_argument("--avg-chars-per-word", type=positive_float, default=5.0)
     parser.add_argument("--pre-click-delay-seconds", type=float, default=1.0)
@@ -209,6 +225,7 @@ def write_video_sidecars(
     generated_at = now_iso()
     chars_per_second = args.type_words_per_second * args.avg_chars_per_word
     typing_interval_ms = max(int(round(1000 / chars_per_second)), 1)
+    encode_settings = encode_profile_settings(str(args.encode_profile))
 
     directives_lines = [
         f"# Video Directives: {video_path.name}",
@@ -220,6 +237,12 @@ def write_video_sidecars(
         "## Capture Directives",
         f"- Window size: `{args.width}x{args.height}`",
         f"- FPS: `{args.fps}`",
+        f"- Encode profile: `{args.encode_profile}`",
+        (
+            f"- MP4 codec settings: `libx264 preset={encode_settings['video_preset']} "
+            f"crf={encode_settings['video_crf']} pix_fmt=yuv420p`"
+        ),
+        f"- MP4 audio settings: `aac {encode_settings['audio_bitrate']} 48kHz`",
         "- UI source: `task_manager` PySide6 app",
         "",
         "## Interaction Directives",
@@ -301,21 +324,6 @@ def write_video_sidecars(
     with story_path.open("a", encoding="utf-8") as handle:
         handle.write("\n".join(performance_lines) + "\n")
     return directives_path, story_path
-
-
-def copy_sidecar_files(source_video: Path, target_video: Path) -> list[Path]:
-    source_directives, source_story = sidecar_paths(source_video)
-    target_directives, target_story = sidecar_paths(target_video)
-    copied: list[Path] = []
-    if source_directives.exists():
-        target_directives.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_directives, target_directives)
-        copied.append(target_directives)
-    if source_story.exists():
-        target_story.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_story, target_story)
-        copied.append(target_story)
-    return copied
 
 
 def format_ascii_table(tasks: list[dict[str, Any]]) -> str:
@@ -822,6 +830,7 @@ def encode_video(
     frames_dir: Path,
     fps: int,
     output_path: Path,
+    encode_settings: dict[str, str],
     audio_track_path: Path | None = None,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -840,9 +849,9 @@ def encode_video(
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            encode_settings["video_preset"],
             "-crf",
-            "20",
+            encode_settings["video_crf"],
             "-pix_fmt",
             "yuv420p",
         ]
@@ -853,7 +862,7 @@ def encode_video(
                 "-c:a",
                 "aac",
                 "-b:a",
-                "128k",
+                encode_settings["audio_bitrate"],
                 "-ar",
                 "48000",
                 "-shortest",
@@ -874,7 +883,6 @@ def run_demo(args: argparse.Namespace) -> list[Path]:
     import ui
 
     output_path = Path(args.output).resolve()
-    fallback_path = Path(args.fallback_output).resolve()
     raw_video_generation_seconds = 0.0
     transcode_seconds = 0.0
     post_processing_seconds = 0.0
@@ -915,6 +923,7 @@ def run_demo(args: argparse.Namespace) -> list[Path]:
         )
 
         ffmpeg_exe = resolve_ffmpeg(args.ffmpeg_path)
+        encode_settings = encode_profile_settings(str(args.encode_profile))
         post_start = time.perf_counter()
         transcode_start = time.perf_counter()
         encode_video(
@@ -922,6 +931,7 @@ def run_demo(args: argparse.Namespace) -> list[Path]:
             frames_dir=frames_dir,
             fps=args.fps,
             output_path=output_path,
+            encode_settings=encode_settings,
             audio_track_path=interaction_audio_path,
         )
         transcode_seconds = time.perf_counter() - transcode_start
@@ -938,12 +948,6 @@ def run_demo(args: argparse.Namespace) -> list[Path]:
     generated_paths: list[Path] = [output_path]
     directives_path, story_path = write_video_sidecars(output_path, args, DemoDirector.GOALS, performance=performance)
     generated_paths.extend([directives_path, story_path])
-
-    if args.generate_fallback_copy:
-        fallback_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(output_path, fallback_path)
-        generated_paths.append(fallback_path)
-        generated_paths.extend(copy_sidecar_files(output_path, fallback_path))
 
     return generated_paths
 

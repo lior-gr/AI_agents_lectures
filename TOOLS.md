@@ -37,13 +37,12 @@ powershell -ExecutionPolicy Bypass -File tools/tutorial_video_creator/run.ps1 `
   --process-input "C:\recordings\agent-process.mp4"
 ```
 
-Generate only process video and also create fallback copies:
+Generate only process video:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/tutorial_video_creator/run.ps1 `
   --output-mode process `
-  --process-input "C:\recordings\agent-process.mp4" `
-  --generate-fallback-copies
+  --process-input "C:\recordings\agent-process.mp4"
 ```
 
 Print machine-readable schema for LLM/tool integration:
@@ -118,11 +117,6 @@ powershell -ExecutionPolicy Bypass -File tools/tutorial_video_creator/run.ps1 --
       "default": false,
       "description": "Generate synthetic source clips when source videos are missing."
     },
-    "generate-fallback-copies": {
-      "type": "boolean",
-      "default": false,
-      "description": "Copy primary outputs to fallback file names used by the site."
-    },
     "print-schema": {
       "type": "boolean",
       "default": false,
@@ -138,8 +132,6 @@ powershell -ExecutionPolicy Bypass -File tools/tutorial_video_creator/run.ps1 --
 - `learning-process-fast.mp4`
 - `tutorial-outcome.webm` (optional)
 - `learning-process-fast.webm` (optional)
-- `tutorial-outcome-fallback.mp4` (optional copy)
-- `learning-process-fast-fallback.mp4` (optional copy)
 
 ## Tool: `browser_video_creator`
 
@@ -150,16 +142,16 @@ powershell -ExecutionPolicy Bypass -File tools/tutorial_video_creator/run.ps1 --
 
 ### Invocation examples
 
-Generate both tutorial videos from the local tutorial site with fallback copies:
+Generate both tutorial videos from the local tutorial site:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/browser_video_creator/run.ps1 `
   --mode site-videos `
   --output-mode both `
+  --encode-profile draft `
   --browser chrome `
   --show-mouse-overlay `
-  --pre-click-delay-seconds 1 `
-  --generate-fallback-copies
+  --pre-click-delay-seconds 1
 ```
 
 Generate a single custom HTML tour video:
@@ -176,6 +168,7 @@ Generate a slideshow video directly from concept text:
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/browser_video_creator/run.ps1 `
   --mode concept-slideshow `
+  --encode-profile release `
   --concept "Agent loop controls tool usage; MCP isolates execution; skills inject reasoning guidance." `
   --slideshow-output "agent-concepts.mp4"
 ```
@@ -272,6 +265,11 @@ powershell -ExecutionPolicy Bypass -File tools/browser_video_creator/run.ps1 --p
       "minimum": 12,
       "default": 30
     },
+    "encode-profile": {
+      "type": "string",
+      "enum": ["draft", "release"],
+      "default": "draft"
+    },
     "browser": {
       "type": "string",
       "enum": ["auto", "chrome", "edge"],
@@ -298,10 +296,6 @@ powershell -ExecutionPolicy Bypass -File tools/browser_video_creator/run.ps1 --p
       "type": "string",
       "default": ""
     },
-    "generate-fallback-copies": {
-      "type": "boolean",
-      "default": false
-    },
     "print-schema": {
       "type": "boolean",
       "default": false
@@ -314,8 +308,6 @@ powershell -ExecutionPolicy Bypass -File tools/browser_video_creator/run.ps1 --p
 
 - `tutorial-outcome.mp4` (site-videos mode)
 - `learning-process-fast.mp4` (site-videos mode)
-- `tutorial-outcome-fallback.mp4` (optional copy)
-- `learning-process-fast-fallback.mp4` (optional copy)
 - custom tour output (html-tour mode)
 - custom slideshow output (concept-slideshow mode)
 - for each generated video file `name.mp4`:
@@ -331,18 +323,19 @@ powershell -ExecutionPolicy Bypass -File tools/browser_video_creator/run.ps1 --p
 
 ### Invocation examples
 
-Generate tutorial outcome video (with fallback copy):
+Generate tutorial outcome video:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/gui_demo_video_creator/run.ps1 `
-  --output "Lessons/tutorial_site/media/tutorial-outcome.mp4" `
-  --fallback-output "Lessons/tutorial_site/media/tutorial-outcome-fallback.mp4"
+  --encode-profile draft `
+  --output "Lessons/tutorial_site/media/tutorial-outcome.mp4"
 ```
 
 Adjust directing pace:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/gui_demo_video_creator/run.ps1 `
+  --encode-profile release `
   --type-words-per-second 3 `
   --avg-chars-per-word 5 `
   --pre-click-delay-seconds 1 `
@@ -371,11 +364,10 @@ powershell -ExecutionPolicy Bypass -File tools/gui_demo_video_creator/run.ps1 --
   "required": [],
   "properties": {
     "output": { "type": "string", "default": "Lessons/tutorial_site/media/tutorial-outcome.mp4" },
-    "fallback-output": { "type": "string", "default": "Lessons/tutorial_site/media/tutorial-outcome-fallback.mp4" },
-    "generate-fallback-copy": { "type": "boolean", "default": true },
     "width": { "type": "integer", "default": 1366, "minimum": 900 },
     "height": { "type": "integer", "default": 820, "minimum": 600 },
     "fps": { "type": "integer", "default": 12, "minimum": 6 },
+    "encode-profile": { "type": "string", "default": "draft", "enum": ["draft", "release"] },
     "type-words-per-second": { "type": "number", "default": 3.0, "minimum": 0.5 },
     "avg-chars-per-word": { "type": "number", "default": 5.0, "minimum": 1.0 },
     "pre-click-delay-seconds": { "type": "number", "default": 1.0, "minimum": 0.0 },
@@ -391,7 +383,6 @@ powershell -ExecutionPolicy Bypass -File tools/gui_demo_video_creator/run.ps1 --
 ### Output artifacts
 
 - `tutorial-outcome.mp4` (default)
-- `tutorial-outcome-fallback.mp4` (optional copy)
 - for each generated video file `name.mp4`:
   - `name.directives.md` (rendering/interaction directives + performance status)
   - `name.story.md` (narrative intent/beats + performance status)

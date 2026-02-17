@@ -74,13 +74,13 @@ Show the real lesson flow across the tutorial pages (excluding the landing previ
 - Regenerate and repeat until visual pacing and clarity match the intended story.
 
 ## Performance Status
-- Raw video generation (seconds): `115.528`
-- Post processing (seconds): `132.334`
-- Transcode step (seconds): `97.532`
-- Effects step (seconds): `34.803`
-- Video length (seconds): `109.730`
-- Video size on disk (bytes): `36737039`
+- Raw video generation (seconds): `114.455`
+- Post processing (seconds): `98.246`
+- Transcode step (seconds): `70.333`
+- Effects step (seconds): `27.913`
+- Video length (seconds): `99.360`
+- Video size on disk (bytes): `19325559`
 - Has audio stream: `True`
-- Directives generation (seconds): `0.001898`
-- Story generation (seconds): `0.001428`
-- Sidecar generation total (seconds): `0.003326`
+- Directives generation (seconds): `0.001706`
+- Story generation (seconds): `0.001365`
+- Sidecar generation total (seconds): `0.003071`

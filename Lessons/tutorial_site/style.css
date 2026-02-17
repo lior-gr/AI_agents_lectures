@@ -582,43 +582,6 @@ pre.code {
   background: #030916;
 }
 
-.video-fallback {
-  display: none;
-  padding: 12px;
-  color: #e2ecff;
-  background:
-    linear-gradient(180deg, rgba(5, 16, 35, 0.95), rgba(6, 24, 48, 0.98)),
-    radial-gradient(circle at 10% 20%, rgba(56, 189, 248, 0.18), transparent 42%),
-    radial-gradient(circle at 90% 10%, rgba(34, 197, 94, 0.12), transparent 38%);
-}
-
-.video-shell.is-fallback .learning-video {
-  display: none;
-}
-
-.video-shell.is-fallback .video-fallback {
-  display: block;
-}
-
-.video-fallback p {
-  margin: 0;
-  font-size: 0.84rem;
-  line-height: 1.6;
-}
-
-.fallback-video {
-  margin-top: 8px;
-}
-
-.video-fallback-label {
-  margin: 0 0 6px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-  color: #9bc1ff;
-  font-size: 0.73rem;
-}
-
 .video-points,
 .fast-steps {
   margin: 10px 0 0;

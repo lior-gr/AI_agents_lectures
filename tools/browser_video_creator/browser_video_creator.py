@@ -28,6 +28,18 @@ from urllib.parse import urljoin
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SITE_DIR = PROJECT_ROOT / "Lessons" / "tutorial_site"
 DEFAULT_MEDIA_DIR = DEFAULT_SITE_DIR / "media"
+ENCODE_PROFILES: dict[str, dict[str, str]] = {
+    "draft": {
+        "video_preset": "veryfast",
+        "video_crf": "22",
+        "audio_bitrate": "96k",
+    },
+    "release": {
+        "video_preset": "medium",
+        "video_crf": "18",
+        "audio_bitrate": "128k",
+    },
+}
 
 
 def tool_schema() -> dict:
@@ -151,6 +163,13 @@ def tool_schema() -> dict:
                 "minimum": 12,
                 "description": "Target frames-per-second for MP4 outputs.",
             },
+            "encode-profile": {
+                "type": "string",
+                "required": False,
+                "default": "draft",
+                "enum": ["draft", "release"],
+                "description": "Encoding quality/speed profile for MP4 output.",
+            },
             "browser": {
                 "type": "string",
                 "required": False,
@@ -188,12 +207,6 @@ def tool_schema() -> dict:
                 "required": False,
                 "default": "",
                 "description": "Optional explicit ffmpeg executable.",
-            },
-            "generate-fallback-copies": {
-                "type": "boolean",
-                "required": False,
-                "default": False,
-                "description": "Copy primary outputs to fallback file names expected by the site.",
             },
             "print-schema": {
                 "type": "boolean",
@@ -245,6 +258,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--width", type=lambda v: min_int(v, 640, "width"), default=1280)
     parser.add_argument("--height", type=lambda v: min_int(v, 360, "height"), default=720)
     parser.add_argument("--fps", type=lambda v: min_int(v, 12, "fps"), default=30)
+    parser.add_argument("--encode-profile", choices=sorted(ENCODE_PROFILES.keys()), default="draft")
     parser.add_argument("--browser", choices=["auto", "chrome", "edge"], default="auto")
     parser.add_argument("--browser-path", default="")
     parser.add_argument("--show-browser", action="store_true")
@@ -252,7 +266,6 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--hide-mouse-overlay", dest="show_mouse_overlay", action="store_false")
     parser.add_argument("--pre-click-delay-seconds", type=float, default=1.0)
     parser.add_argument("--ffmpeg-path", default="")
-    parser.add_argument("--generate-fallback-copies", action="store_true")
     parser.add_argument("--print-schema", action="store_true")
     return parser.parse_args(argv)
 
@@ -268,6 +281,14 @@ def parse_pages(raw_value: str) -> list[str]:
 def sidecar_paths(video_path: Path) -> tuple[Path, Path]:
     base = video_path.with_suffix("")
     return base.with_suffix(".directives.md"), base.with_suffix(".story.md")
+
+
+def encode_profile_settings(profile_name: str) -> dict[str, str]:
+    settings = ENCODE_PROFILES.get(profile_name)
+    if not settings:
+        valid = ", ".join(sorted(ENCODE_PROFILES.keys()))
+        raise RuntimeError(f"Unknown encode profile '{profile_name}'. Expected one of: {valid}")
+    return settings
 
 
 def describe_action(action: dict) -> str:
@@ -309,6 +330,7 @@ def write_video_sidecars(
 ) -> tuple[Path, Path]:
     directives_path, story_path = sidecar_paths(video_path)
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    encode_settings = encode_profile_settings(str(args.encode_profile))
 
     directives_lines = [
         f"# Video Directives: {video_path.name}",
@@ -321,6 +343,12 @@ def write_video_sidecars(
         "## Capture Directives",
         f"- Resolution: `{args.width}x{args.height}`",
         f"- FPS: `{args.fps}`",
+        f"- Encode profile: `{args.encode_profile}`",
+        (
+            f"- MP4 codec settings: `libx264 preset={encode_settings['video_preset']} "
+            f"crf={encode_settings['video_crf']} pix_fmt=yuv420p`"
+        ),
+        f"- MP4 audio settings: `aac {encode_settings['audio_bitrate']} 48kHz`",
         f"- Browser preference: `{args.browser}`",
         f"- Show browser window: `{bool(args.show_browser)}`",
         f"- Mouse overlay: `{bool(args.show_mouse_overlay)}`",
@@ -400,21 +428,6 @@ def write_video_sidecars(
     return directives_path, story_path
 
 
-def copy_sidecar_files(source_video: Path, target_video: Path) -> list[Path]:
-    source_directives, source_story = sidecar_paths(source_video)
-    target_directives, target_story = sidecar_paths(target_video)
-    copied: list[Path] = []
-    if source_directives.exists():
-        target_directives.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_directives, target_directives)
-        copied.append(target_directives)
-    if source_story.exists():
-        target_story.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_story, target_story)
-        copied.append(target_story)
-    return copied
-
-
 def resolve_ffmpeg(preferred_path: str) -> str:
     if preferred_path:
         candidate = Path(preferred_path)
@@ -446,7 +459,15 @@ def run_ffmpeg(ffmpeg_exe: str, args: Iterable[str]) -> None:
         raise RuntimeError(f"ffmpeg failed with exit code {process.returncode}")
 
 
-def transcode_webm_to_mp4(ffmpeg_exe: str, source_webm: Path, target_mp4: Path, fps: int) -> None:
+def transcode_webm_to_mp4(
+    ffmpeg_exe: str,
+    source_webm: Path,
+    target_mp4: Path,
+    fps: int,
+    *,
+    video_preset: str,
+    video_crf: str,
+) -> None:
     target_mp4.parent.mkdir(parents=True, exist_ok=True)
     run_ffmpeg(
         ffmpeg_exe,
@@ -459,9 +480,9 @@ def transcode_webm_to_mp4(ffmpeg_exe: str, source_webm: Path, target_mp4: Path, 
             "-c:v",
             "libx264",
             "-preset",
-            "medium",
+            video_preset,
             "-crf",
-            "18",
+            video_crf,
             "-pix_fmt",
             "yuv420p",
             "-movflags",
@@ -537,10 +558,20 @@ def synthesize_interaction_audio(
         duration = max(float(event.get("duration", 0.0)), 0.0)
         if duration <= 0.0:
             continue
-        tick_gap = 0.135
-        tick_count = max(int(duration / tick_gap), 1)
-        for tick in range(tick_count):
-            tick_time = start_time + min((tick + 0.25) * tick_gap, duration)
+        step_count = max(int(event.get("step_count", 0)), 0)
+        tick_times: list[float] = []
+        if step_count > 1:
+            max_ticks = 18
+            stride = max(step_count // max_ticks, 1)
+            for step_idx in range(0, step_count, stride):
+                progress = step_idx / float(step_count - 1)
+                tick_times.append(start_time + duration * progress)
+        else:
+            tick_gap = 0.135
+            tick_count = max(int(duration / tick_gap), 1)
+            for tick in range(tick_count):
+                tick_times.append(start_time + min(tick * tick_gap, duration))
+        for tick_time in tick_times:
             add_burst(
                 tick_time,
                 event_index=scroll_tick_index,
@@ -616,7 +647,7 @@ def synthesize_interaction_audio(
         wav.writeframes(pcm_samples.tobytes())
 
 
-def mux_audio_into_mp4(ffmpeg_exe: str, video_path: Path, audio_path: Path) -> None:
+def mux_audio_into_mp4(ffmpeg_exe: str, video_path: Path, audio_path: Path, *, audio_bitrate: str) -> None:
     if not audio_path.exists():
         return
     temp_output = video_path.with_name(f"{video_path.stem}.audio.tmp.mp4")
@@ -633,7 +664,7 @@ def mux_audio_into_mp4(ffmpeg_exe: str, video_path: Path, audio_path: Path) -> N
             "-c:a",
             "aac",
             "-b:a",
-            "128k",
+            audio_bitrate,
             "-ar",
             "48000",
             "-shortest",
@@ -762,6 +793,9 @@ def annotate_cursor_on_mp4(
     video_path: Path,
     cursor_events: list[dict[str, float | str]],
     fps: int,
+    *,
+    video_preset: str,
+    video_crf: str,
 ) -> None:
     if not cursor_events:
         return
@@ -785,9 +819,9 @@ def annotate_cursor_on_mp4(
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            video_preset,
             "-crf",
-            "21",
+            video_crf,
             "-pix_fmt",
             "yuv420p",
             "-movflags",
@@ -935,9 +969,7 @@ def ensure_focus_overlay(page) -> None:
                     .__demo_focus_target__ {
                         position: relative !important;
                         z-index: 2147483646 !important;
-                        transform: scale(var(--demo-focus-scale, 1));
-                        transform-origin: center center;
-                        transition: transform 220ms ease, box-shadow 220ms ease;
+                        transition: box-shadow 220ms ease;
                         box-shadow:
                             0 0 0 2px rgba(104, 190, 255, 0.55),
                             0 16px 36px rgba(9, 31, 65, 0.26);
@@ -979,27 +1011,48 @@ def ensure_focus_overlay(page) -> None:
             document.body.appendChild(frame);
 
             window.__demoFocusTarget = null;
+            window.__demoResolveTarget = (selector) => {
+                const candidates = Array.from(document.querySelectorAll(selector));
+                if (!candidates.length) {
+                    return null;
+                }
+                const visible = candidates.find((node) => {
+                    if (!(node instanceof Element)) {
+                        return false;
+                    }
+                    const style = window.getComputedStyle(node);
+                    if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity || "1") === 0) {
+                        return false;
+                    }
+                    const rect = node.getBoundingClientRect();
+                    return rect.width >= 2 && rect.height >= 2;
+                });
+                return visible || candidates[0];
+            };
 
             window.__demoFocusOn = (selector, options = {}) => {
-                const target = document.querySelector(selector);
+                const target = window.__demoResolveTarget?.(selector);
                 if (!target) {
                     return false;
                 }
                 if (window.__demoFocusTarget && window.__demoFocusTarget !== target) {
                     window.__demoFocusTarget.classList.remove("__demo_focus_target__");
-                    window.__demoFocusTarget.style.removeProperty("--demo-focus-scale");
                 }
 
                 const rect = target.getBoundingClientRect();
                 const padding = Number.isFinite(options.padding) ? options.padding : 16;
                 const zoom = Number.isFinite(options.zoom) ? options.zoom : 1.03;
                 const dimOpacity = Number.isFinite(options.dim_opacity) ? options.dim_opacity : 0.18;
-                const left = Math.max(rect.left - padding, 4);
-                const top = Math.max(rect.top - padding, 4);
+                const centerX = rect.left + rect.width / 2;
+                const centerY = rect.top + rect.height / 2;
+                const focusWidth = Math.max(10, rect.width * Math.max(zoom, 1.0));
+                const focusHeight = Math.max(10, rect.height * Math.max(zoom, 1.0));
+                const left = Math.max(centerX - (focusWidth / 2) - padding, 4);
+                const top = Math.max(centerY - (focusHeight / 2) - padding, 4);
                 const maxWidth = Math.max(window.innerWidth - left - 4, 12);
                 const maxHeight = Math.max(window.innerHeight - top - 4, 12);
-                const width = Math.min(rect.width + padding * 2, maxWidth);
-                const height = Math.min(rect.height + padding * 2, maxHeight);
+                const width = Math.min(focusWidth + padding * 2, maxWidth);
+                const height = Math.min(focusHeight + padding * 2, maxHeight);
 
                 shade.style.opacity = String(Math.max(0.0, Math.min(dimOpacity, 0.35)));
                 frame.style.left = `${left}px`;
@@ -1009,7 +1062,6 @@ def ensure_focus_overlay(page) -> None:
                 frame.style.opacity = "1";
 
                 target.classList.add("__demo_focus_target__");
-                target.style.setProperty("--demo-focus-scale", String(Math.max(1.0, Math.min(zoom, 1.08))));
                 window.__demoFocusTarget = target;
                 return true;
             };
@@ -1019,7 +1071,6 @@ def ensure_focus_overlay(page) -> None:
                 frame.style.opacity = "0";
                 if (window.__demoFocusTarget) {
                     window.__demoFocusTarget.classList.remove("__demo_focus_target__");
-                    window.__demoFocusTarget.style.removeProperty("--demo-focus-scale");
                     window.__demoFocusTarget = null;
                 }
             };
@@ -1127,25 +1178,16 @@ def focus_selector(
 
     locator = page.locator(selector).first
     try:
-        locator.wait_for(state="attached", timeout=timeout_ms)
+        locator.wait_for(state="visible", timeout=timeout_ms)
     except PlaywrightTimeoutError:
         return False
 
-    scrolled = page.evaluate(
-        """([sel]) => {
-            const target = document.querySelector(sel);
-            if (!target) {
-                return false;
-            }
-            target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-            return true;
-        }""",
-        [selector],
-    )
-    if not scrolled:
+    try:
+        locator.scroll_into_view_if_needed(timeout=timeout_ms)
+    except PlaywrightTimeoutError:
         return False
 
-    page.wait_for_timeout(520)
+    page.wait_for_timeout(120)
     try:
         box = locator.bounding_box(timeout=timeout_ms)
     except PlaywrightTimeoutError:
@@ -1192,7 +1234,7 @@ def run_actions(
             timestamp = max(time.monotonic() - time_origin, 0.0)
         cursor_events.append({"t": timestamp, "x": float(x), "y": float(y), "kind": kind})
 
-    def track_interaction(kind: str, duration: float | None = None) -> None:
+    def track_interaction(kind: str, duration: float | None = None, step_count: int | None = None) -> None:
         if interaction_events is None:
             return
         if time_origin is None:
@@ -1202,6 +1244,8 @@ def run_actions(
         event: dict[str, float | str] = {"t": timestamp, "kind": str(kind)}
         if duration is not None:
             event["duration"] = max(float(duration), 0.0)
+        if step_count is not None:
+            event["step_count"] = max(int(step_count), 0)
         interaction_events.append(event)
 
     for action in actions:
@@ -1224,12 +1268,13 @@ def run_actions(
 
         if action_type == "scroll":
             scroll_duration_seconds = float(action["duration_seconds"])
-            track_interaction("scroll", duration=scroll_duration_seconds)
+            scroll_steps = int(action["steps"])
+            track_interaction("scroll", duration=scroll_duration_seconds, step_count=scroll_steps)
             smooth_scroll(
                 page,
                 pixels=int(action["pixels"]),
                 duration_seconds=scroll_duration_seconds,
-                steps=int(action["steps"]),
+                steps=scroll_steps,
             )
             continue
 
@@ -1275,20 +1320,22 @@ def run_actions(
             optional = bool(action.get("optional", False))
             timeout_ms = int(action.get("timeout_ms", 2000))
             has_target = True
+            target_pos: tuple[float, float] | None = None
             if show_mouse_overlay:
                 ensure_mouse_overlay(page)
                 target_pos = move_mouse_to_selector(page, selector=selector, timeout_ms=timeout_ms)
                 has_target = target_pos is not None
                 if target_pos is not None:
                     track_cursor(target_pos[0], target_pos[1], kind="move")
-                    page.evaluate("() => window.__demoMouseClick?.()")
-                    track_cursor(target_pos[0], target_pos[1], kind="click")
             if not has_target and optional:
                 continue
             delay_ms = int(max(pre_click_delay_seconds, 0.0) * 1000)
             if delay_ms > 0:
                 page.wait_for_timeout(delay_ms)
             try:
+                if show_mouse_overlay and target_pos is not None:
+                    page.evaluate("() => window.__demoMouseClick?.()")
+                    track_cursor(target_pos[0], target_pos[1], kind="click")
                 track_interaction("click")
                 page.click(selector, timeout=timeout_ms)
             except PlaywrightTimeoutError:
@@ -1670,9 +1717,17 @@ def create_video_from_actions(
     ffmpeg_exe = ""
     try:
         ffmpeg_exe = resolve_ffmpeg(args.ffmpeg_path)
+        encode_settings = encode_profile_settings(str(args.encode_profile))
         post_start = time.perf_counter()
         transcode_start = time.perf_counter()
-        transcode_webm_to_mp4(ffmpeg_exe=ffmpeg_exe, source_webm=webm_path, target_mp4=output_path, fps=args.fps)
+        transcode_webm_to_mp4(
+            ffmpeg_exe=ffmpeg_exe,
+            source_webm=webm_path,
+            target_mp4=output_path,
+            fps=args.fps,
+            video_preset=encode_settings["video_preset"],
+            video_crf=encode_settings["video_crf"],
+        )
         transcode_seconds = time.perf_counter() - transcode_start
         effect_start = time.perf_counter()
         interaction_audio_path = Path(tempfile.gettempdir()) / f"browser-audio-{int(time.time() * 1000)}.wav"
@@ -1684,7 +1739,12 @@ def create_video_from_actions(
                 interaction_events=interaction_events,
                 include_background_music=include_background_music,
             )
-            mux_audio_into_mp4(ffmpeg_exe=ffmpeg_exe, video_path=output_path, audio_path=interaction_audio_path)
+            mux_audio_into_mp4(
+                ffmpeg_exe=ffmpeg_exe,
+                video_path=output_path,
+                audio_path=interaction_audio_path,
+                audio_bitrate=encode_settings["audio_bitrate"],
+            )
         finally:
             if interaction_audio_path.exists():
                 interaction_audio_path.unlink()
@@ -1765,17 +1825,6 @@ def run_site_videos(args: argparse.Namespace) -> list[Path]:
             )
             outputs.extend([process_directives, process_story])
 
-    if args.generate_fallback_copies:
-        for source, fallback_name in [
-            (media_dir / "tutorial-outcome.mp4", "tutorial-outcome-fallback.mp4"),
-            (media_dir / "learning-process-fast.mp4", "learning-process-fast-fallback.mp4"),
-        ]:
-            if source.exists():
-                target = media_dir / fallback_name
-                shutil.copy2(source, target)
-                outputs.append(target)
-                outputs.extend(copy_sidecar_files(source, target))
-                print(f"Created fallback copy: {target}")
     return outputs
 
 
