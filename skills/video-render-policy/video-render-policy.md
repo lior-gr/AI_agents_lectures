@@ -52,6 +52,29 @@ Treat changes as **rendering-impacting** when they can change visual output, tim
 3. If a matched code file changed only in comments/whitespace, treat it as non-impacting.
 4. Render `release` only for impacted targets.
 
+## Enforcement
+
+The repository includes a tracked pre-push gate:
+
+- Hook: `.githooks/pre-push`
+- Checker: `tools/video_render_policy/check_release_gate.py`
+
+Enable tracked hooks once per clone:
+
+```powershell
+git config core.hooksPath .githooks
+```
+
+Manual check options:
+
+```powershell
+# Validate exactly what is staged for commit
+python tools/video_render_policy/check_release_gate.py --check-staged
+
+# Validate what will be pushed for a branch range
+python tools/video_render_policy/check_release_gate.py --range origin/main..HEAD
+```
+
 ## Examples
 
 - Changed only `.gitignore` -> no render.

@@ -1,0 +1,29 @@
+#!/usr/bin/env sh
+# Enforce release rendering policy for video-impacting changes.
+
+if [ "${SKIP_VIDEO_RENDER_POLICY_CHECK:-0}" = "1" ]; then
+  exit 0
+fi
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$repo_root" ]; then
+  echo "video-render-policy: unable to resolve repo root." >&2
+  exit 1
+fi
+
+checker="$repo_root/tools/video_render_policy/check_release_gate.py"
+if [ ! -f "$checker" ]; then
+  echo "video-render-policy: checker not found: $checker" >&2
+  exit 1
+fi
+
+if command -v python >/dev/null 2>&1; then
+  exec python "$checker" --pre-push
+fi
+
+if command -v py >/dev/null 2>&1; then
+  exec py -3 "$checker" --pre-push
+fi
+
+echo "video-render-policy: Python runtime not found for pre-push check." >&2
+exit 1

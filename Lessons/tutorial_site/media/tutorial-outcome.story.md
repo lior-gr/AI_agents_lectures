@@ -14,13 +14,13 @@ Demonstrate an end-to-end user journey in the task manager GUI: inspecting task 
 - Regenerate and review until narrative clarity and pacing match your target.
 
 ## Performance Status
-- Raw video generation (seconds): `57.971`
-- Post processing (seconds): `19.512`
-- Transcode step (seconds): `19.512`
+- Raw video generation (seconds): `63.715`
+- Post processing (seconds): `13.607`
+- Transcode step (seconds): `13.607`
 - Overlay step (seconds): `0.000`
-- Video length (seconds): `33.410`
-- Video size on disk (bytes): `618666`
+- Video length (seconds): `28.120`
+- Video size on disk (bytes): `649765`
 - Has audio stream: `True`
-- Directives generation (seconds): `0.001764`
-- Story generation (seconds): `0.001247`
-- Sidecar generation total (seconds): `0.003011`
+- Directives generation (seconds): `0.001525`
+- Story generation (seconds): `0.001239`
+- Sidecar generation total (seconds): `0.002764`
