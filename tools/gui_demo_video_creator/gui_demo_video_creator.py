@@ -113,6 +113,69 @@ def run_ffmpeg(ffmpeg_exe: str, args: list[str]) -> None:
         raise RuntimeError(f"ffmpeg failed with exit code {process.returncode}")
 
 
+def probe_video_duration_seconds(video_path: Path) -> float:
+    try:
+        import imageio_ffmpeg
+
+        _frames, seconds = imageio_ffmpeg.count_frames_and_secs(str(video_path))
+        return float(seconds)
+    except Exception as exc:
+        raise RuntimeError(f"Could not read video duration for: {video_path}") from exc
+
+
+def resolve_ffprobe(ffmpeg_exe: str) -> str | None:
+    ffmpeg_path = Path(ffmpeg_exe)
+    ffprobe_name = "ffprobe.exe" if ffmpeg_path.name.lower().endswith(".exe") else "ffprobe"
+    sibling = ffmpeg_path.with_name(ffprobe_name)
+    if sibling.exists():
+        return str(sibling)
+    found = shutil.which("ffprobe")
+    if found:
+        return found
+    return None
+
+
+def probe_video_has_audio(video_path: Path, ffmpeg_exe: str) -> bool:
+    ffprobe_exe = resolve_ffprobe(ffmpeg_exe)
+    if ffprobe_exe:
+        process = subprocess.run(
+            [
+                ffprobe_exe,
+                "-v",
+                "error",
+                "-select_streams",
+                "a",
+                "-show_entries",
+                "stream=index",
+                "-of",
+                "csv=p=0",
+                str(video_path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if process.returncode == 0:
+            return bool((process.stdout or "").strip())
+
+    fallback = subprocess.run(
+        [ffmpeg_exe, "-i", str(video_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    diagnostic = ((fallback.stdout or "") + "\n" + (fallback.stderr or "")).lower()
+    return " audio: " in diagnostic
+
+
+def collect_video_file_stats(video_path: Path, ffmpeg_exe: str) -> dict[str, float | int | bool]:
+    return {
+        "video_length_seconds": probe_video_duration_seconds(video_path),
+        "video_size_bytes": int(video_path.stat().st_size),
+        "has_audio": bool(probe_video_has_audio(video_path, ffmpeg_exe)),
+    }
+
+
 def seed_demo_tasks(storage_module: Any) -> None:
     demo_tasks = [
         {"id": 1, "text": "Review sprint goals", "completed": False},
@@ -126,6 +189,127 @@ def seed_demo_tasks(storage_module: Any) -> None:
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def sidecar_paths(video_path: Path) -> tuple[Path, Path]:
+    base = video_path.with_suffix("")
+    return base.with_suffix(".directives.md"), base.with_suffix(".story.md")
+
+
+def write_video_sidecars(
+    video_path: Path,
+    args: argparse.Namespace,
+    goals: list[str],
+    performance: dict[str, float | int | bool] | None = None,
+) -> tuple[Path, Path]:
+    directives_path, story_path = sidecar_paths(video_path)
+    generated_at = now_iso()
+    chars_per_second = args.type_words_per_second * args.avg_chars_per_word
+    typing_interval_ms = max(int(round(1000 / chars_per_second)), 1)
+
+    directives_lines = [
+        f"# Video Directives: {video_path.name}",
+        "",
+        f"- Generated (UTC): `{generated_at}`",
+        "- Tool: `gui_demo_video_creator`",
+        f"- Output video: `{video_path}`",
+        "",
+        "## Capture Directives",
+        f"- Window size: `{args.width}x{args.height}`",
+        f"- FPS: `{args.fps}`",
+        "- UI source: `task_manager` PySide6 app",
+        "",
+        "## Interaction Directives",
+        f"- Typing pace intent: `{args.type_words_per_second:.2f}` words/second",
+        f"- Typing conversion: `{args.avg_chars_per_word:.2f}` chars/word",
+        f"- Fixed typing cadence: `{chars_per_second:.2f}` chars/second (`{typing_interval_ms}` ms per char)",
+        f"- Pre-click delay: `{max(float(args.pre_click_delay_seconds), 0.0):.2f}` seconds",
+        f"- Wait after typing before submit: `{max(float(args.post_type_wait_seconds), 0.0):.2f}` seconds",
+        f"- Wait between goals: `{max(float(args.between_goals_wait_seconds), 0.0):.2f}` seconds",
+        "- Mouse cue style: non-occluding translucent/hollow markers with click pulse rings",
+        "",
+        "## Goal Script",
+    ]
+    for idx, goal in enumerate(goals, start=1):
+        directives_lines.append(f"{idx}. {goal}")
+    directives_lines.extend(
+        [
+            "",
+            "## Iteration Knobs",
+            "- Adjust timing knobs above to tune pacing and perceived responsiveness.",
+            "- Edit the goal script text to steer scenario outcomes shown in output/logger.",
+            "- Keep goals deterministic so result comparisons across iterations stay meaningful.",
+        ]
+    )
+    directives_text = "\n".join(directives_lines) + "\n"
+    directives_start = time.perf_counter()
+    directives_path.write_text(directives_text, encoding="utf-8")
+    directives_generation_seconds = time.perf_counter() - directives_start
+
+    story_lines = [
+        f"# Video Story: {video_path.name}",
+        "",
+        "## Narrative Intent",
+        (
+            "Demonstrate an end-to-end user journey in the task manager GUI: inspecting task state, "
+            "performing updates, and verifying results with visible agent progress logs."
+        ),
+        "",
+        "## Story Beats",
+        "1. User checks current tasks and sees baseline state.",
+        "2. User marks selected tasks done and verifies updated state.",
+        "3. User adds more tasks and requests full aligned ASCII-table output.",
+        "",
+        "## How To Steer Next Iteration",
+        "- Compare observed behavior against this story and the directives sidecar.",
+        "- Modify goals or timing in directives to change the next render's flow.",
+        "- Regenerate and review until narrative clarity and pacing match your target.",
+    ]
+    story_text = "\n".join(story_lines) + "\n"
+    story_start = time.perf_counter()
+    story_path.write_text(story_text, encoding="utf-8")
+    story_generation_seconds = time.perf_counter() - story_start
+
+    performance_lines = ["", "## Performance Status"]
+    if performance:
+        performance_lines.extend(
+            [
+                f"- Raw video generation (seconds): `{float(performance.get('raw_video_generation_seconds', 0.0)):.3f}`",
+                f"- Post processing (seconds): `{float(performance.get('post_processing_seconds', 0.0)):.3f}`",
+                f"- Transcode step (seconds): `{float(performance.get('transcode_seconds', 0.0)):.3f}`",
+                f"- Overlay step (seconds): `{float(performance.get('overlay_seconds', 0.0)):.3f}`",
+                f"- Video length (seconds): `{float(performance.get('video_length_seconds', 0.0)):.3f}`",
+                f"- Video size on disk (bytes): `{int(performance.get('video_size_bytes', 0))}`",
+                f"- Has audio stream: `{bool(performance.get('has_audio', False))}`",
+            ]
+        )
+    performance_lines.extend(
+        [
+            f"- Directives generation (seconds): `{directives_generation_seconds:.6f}`",
+            f"- Story generation (seconds): `{story_generation_seconds:.6f}`",
+            f"- Sidecar generation total (seconds): `{(directives_generation_seconds + story_generation_seconds):.6f}`",
+        ]
+    )
+    with directives_path.open("a", encoding="utf-8") as handle:
+        handle.write("\n".join(performance_lines) + "\n")
+    with story_path.open("a", encoding="utf-8") as handle:
+        handle.write("\n".join(performance_lines) + "\n")
+    return directives_path, story_path
+
+
+def copy_sidecar_files(source_video: Path, target_video: Path) -> list[Path]:
+    source_directives, source_story = sidecar_paths(source_video)
+    target_directives, target_story = sidecar_paths(target_video)
+    copied: list[Path] = []
+    if source_directives.exists():
+        target_directives.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_directives, target_directives)
+        copied.append(target_directives)
+    if source_story.exists():
+        target_story.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_story, target_story)
+        copied.append(target_story)
+    return copied
 
 
 def format_ascii_table(tasks: list[dict[str, Any]]) -> str:
@@ -504,7 +688,7 @@ def encode_video(ffmpeg_exe: str, frames_dir: Path, fps: int, output_path: Path)
     )
 
 
-def run_demo(args: argparse.Namespace) -> tuple[Path, Path | None]:
+def run_demo(args: argparse.Namespace) -> list[Path]:
     sys.path.insert(0, str(TASK_MANAGER_DIR))
     if not TASK_MANAGER_DIR.exists():
         raise RuntimeError(f"task_manager directory is missing: {TASK_MANAGER_DIR}")
@@ -516,6 +700,10 @@ def run_demo(args: argparse.Namespace) -> tuple[Path, Path | None]:
 
     output_path = Path(args.output).resolve()
     fallback_path = Path(args.fallback_output).resolve()
+    raw_video_generation_seconds = 0.0
+    transcode_seconds = 0.0
+    post_processing_seconds = 0.0
+    ffmpeg_exe = ""
 
     with tempfile.TemporaryDirectory(prefix="gui-demo-") as temp_dir_raw:
         temp_dir = Path(temp_dir_raw)
@@ -533,22 +721,40 @@ def run_demo(args: argparse.Namespace) -> tuple[Path, Path | None]:
 
         director = DemoDirector(app=app, window=window, frames_dir=frames_dir, args=args)
         director.start()
+        raw_start = time.perf_counter()
         app.exec()
+        raw_video_generation_seconds = time.perf_counter() - raw_start
 
         frame_count = len(list(frames_dir.glob("frame_*.png")))
         if frame_count < 2:
             raise RuntimeError("Frame capture failed; not enough frames were generated.")
 
         ffmpeg_exe = resolve_ffmpeg(args.ffmpeg_path)
+        post_start = time.perf_counter()
+        transcode_start = time.perf_counter()
         encode_video(ffmpeg_exe=ffmpeg_exe, frames_dir=frames_dir, fps=args.fps, output_path=output_path)
+        transcode_seconds = time.perf_counter() - transcode_start
+        post_processing_seconds = time.perf_counter() - post_start
 
-    copied_fallback: Path | None = None
+    performance: dict[str, float | int | bool] = {
+        "raw_video_generation_seconds": raw_video_generation_seconds,
+        "post_processing_seconds": post_processing_seconds,
+        "transcode_seconds": transcode_seconds,
+        "overlay_seconds": 0.0,
+    }
+    performance.update(collect_video_file_stats(output_path, ffmpeg_exe))
+
+    generated_paths: list[Path] = [output_path]
+    directives_path, story_path = write_video_sidecars(output_path, args, DemoDirector.GOALS, performance=performance)
+    generated_paths.extend([directives_path, story_path])
+
     if args.generate_fallback_copy:
         fallback_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(output_path, fallback_path)
-        copied_fallback = fallback_path
+        generated_paths.append(fallback_path)
+        generated_paths.extend(copy_sidecar_files(output_path, fallback_path))
 
-    return output_path, copied_fallback
+    return generated_paths
 
 
 def main(argv: list[str]) -> int:
@@ -557,11 +763,10 @@ def main(argv: list[str]) -> int:
         print(json.dumps(tool_schema(), indent=2))
         return 0
 
-    output_path, fallback_path = run_demo(args)
+    generated_paths = run_demo(args)
     print("Generated GUI demo video:")
-    print(f" - {output_path} ({output_path.stat().st_size:,} bytes)")
-    if fallback_path is not None:
-        print(f" - {fallback_path} ({fallback_path.stat().st_size:,} bytes)")
+    for path in generated_paths:
+        print(f" - {path} ({path.stat().st_size:,} bytes)")
     return 0
 
 

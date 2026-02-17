@@ -318,6 +318,9 @@ powershell -ExecutionPolicy Bypass -File tools/browser_video_creator/run.ps1 --p
 - `learning-process-fast-fallback.mp4` (optional copy)
 - custom tour output (html-tour mode)
 - custom slideshow output (concept-slideshow mode)
+- for each generated video file `name.mp4`:
+  - `name.directives.md` (rendering/interaction directives + performance status)
+  - `name.story.md` (narrative intent/beats + performance status)
 
 ## Tool: `gui_demo_video_creator`
 
@@ -389,6 +392,9 @@ powershell -ExecutionPolicy Bypass -File tools/gui_demo_video_creator/run.ps1 --
 
 - `tutorial-outcome.mp4` (default)
 - `tutorial-outcome-fallback.mp4` (optional copy)
+- for each generated video file `name.mp4`:
+  - `name.directives.md` (rendering/interaction directives + performance status)
+  - `name.story.md` (narrative intent/beats + performance status)
 
 ## Tool: `registry_bootstrapper`
 

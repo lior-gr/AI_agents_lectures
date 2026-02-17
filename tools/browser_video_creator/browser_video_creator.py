@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -261,6 +262,149 @@ def parse_pages(raw_value: str) -> list[str]:
     return cleaned
 
 
+def sidecar_paths(video_path: Path) -> tuple[Path, Path]:
+    base = video_path.with_suffix("")
+    return base.with_suffix(".directives.md"), base.with_suffix(".story.md")
+
+
+def describe_action(action: dict) -> str:
+    action_type = str(action.get("type", "")).strip().lower()
+    if action_type == "goto":
+        return f"Open `{action.get('path', '')}` and wait {float(action.get('wait_seconds', 0.0)):.1f}s."
+    if action_type == "click":
+        selector = str(action.get("selector", ""))
+        wait_seconds = float(action.get("wait_seconds", 0.0))
+        optional = bool(action.get("optional", False))
+        optional_note = " (optional)" if optional else ""
+        return f"Click `{selector}`{optional_note}, then wait {wait_seconds:.1f}s."
+    if action_type == "scroll":
+        pixels = int(action.get("pixels", 0))
+        duration = float(action.get("duration_seconds", 0.0))
+        steps = int(action.get("steps", 0))
+        direction = "down" if pixels >= 0 else "up"
+        return f"Scroll {direction} by {abs(pixels)}px over {duration:.1f}s in {steps} steps."
+    if action_type == "wait":
+        return f"Idle for {float(action.get('seconds', 0.0)):.1f}s."
+    return json.dumps(action, ensure_ascii=True)
+
+
+def write_video_sidecars(
+    *,
+    video_path: Path,
+    workflow_name: str,
+    story_summary: str,
+    args: argparse.Namespace,
+    actions: list[dict],
+    performance: dict[str, float | int | bool] | None = None,
+    story_notes: list[str] | None = None,
+) -> tuple[Path, Path]:
+    directives_path, story_path = sidecar_paths(video_path)
+    generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+    directives_lines = [
+        f"# Video Directives: {video_path.name}",
+        "",
+        f"- Generated (UTC): `{generated_at}`",
+        f"- Tool: `browser_video_creator`",
+        f"- Workflow: `{workflow_name}`",
+        f"- Output video: `{video_path}`",
+        "",
+        "## Capture Directives",
+        f"- Resolution: `{args.width}x{args.height}`",
+        f"- FPS: `{args.fps}`",
+        f"- Browser preference: `{args.browser}`",
+        f"- Show browser window: `{bool(args.show_browser)}`",
+        f"- Mouse overlay: `{bool(args.show_mouse_overlay)}`",
+        f"- Pre-click delay (seconds): `{max(float(args.pre_click_delay_seconds), 0.0):.2f}`",
+        "",
+        "## Interaction Script",
+    ]
+    for index, action in enumerate(actions, start=1):
+        directives_lines.append(f"{index}. {describe_action(action)}")
+    directives_lines.extend(
+        [
+            "",
+            "## Iteration Knobs",
+            "- To speed up or slow down pacing: adjust action waits/scroll durations in the tool workflow.",
+            "- To change framing/clarity: tune `--width`, `--height`, and `--fps`.",
+            "- To change interaction emphasis: tune `--pre-click-delay-seconds` and mouse overlay settings.",
+        ]
+    )
+    directives_text = "\n".join(directives_lines) + "\n"
+    directives_start = time.perf_counter()
+    directives_path.write_text(directives_text, encoding="utf-8")
+    directives_generation_seconds = time.perf_counter() - directives_start
+
+    story_lines = [
+        f"# Video Story: {video_path.name}",
+        "",
+        "## Narrative Intent",
+        story_summary.strip(),
+        "",
+        "## Story Beats",
+    ]
+    for index, action in enumerate(actions, start=1):
+        story_lines.append(f"{index}. {describe_action(action)}")
+    if story_notes:
+        story_lines.extend(["", "## Story Notes"])
+        for note in story_notes:
+            story_lines.append(f"- {note}")
+    story_lines.extend(
+        [
+            "",
+            "## How To Steer Next Iteration",
+            "- Compare the current video output with these beats and directives.",
+            "- Edit this story or directives file first, then update tool arguments/workflow actions to match.",
+            "- Regenerate and repeat until visual pacing and clarity match the intended story.",
+        ]
+    )
+    story_text = "\n".join(story_lines) + "\n"
+    story_start = time.perf_counter()
+    story_path.write_text(story_text, encoding="utf-8")
+    story_generation_seconds = time.perf_counter() - story_start
+
+    performance_lines = ["", "## Performance Status"]
+    if performance:
+        performance_lines.extend(
+            [
+                f"- Raw video generation (seconds): `{float(performance.get('raw_video_generation_seconds', 0.0)):.3f}`",
+                f"- Post processing (seconds): `{float(performance.get('post_processing_seconds', 0.0)):.3f}`",
+                f"- Transcode step (seconds): `{float(performance.get('transcode_seconds', 0.0)):.3f}`",
+                f"- Overlay step (seconds): `{float(performance.get('overlay_seconds', 0.0)):.3f}`",
+                f"- Video length (seconds): `{float(performance.get('video_length_seconds', 0.0)):.3f}`",
+                f"- Video size on disk (bytes): `{int(performance.get('video_size_bytes', 0))}`",
+                f"- Has audio stream: `{bool(performance.get('has_audio', False))}`",
+            ]
+        )
+    performance_lines.extend(
+        [
+            f"- Directives generation (seconds): `{directives_generation_seconds:.6f}`",
+            f"- Story generation (seconds): `{story_generation_seconds:.6f}`",
+            f"- Sidecar generation total (seconds): `{(directives_generation_seconds + story_generation_seconds):.6f}`",
+        ]
+    )
+    with directives_path.open("a", encoding="utf-8") as handle:
+        handle.write("\n".join(performance_lines) + "\n")
+    with story_path.open("a", encoding="utf-8") as handle:
+        handle.write("\n".join(performance_lines) + "\n")
+    return directives_path, story_path
+
+
+def copy_sidecar_files(source_video: Path, target_video: Path) -> list[Path]:
+    source_directives, source_story = sidecar_paths(source_video)
+    target_directives, target_story = sidecar_paths(target_video)
+    copied: list[Path] = []
+    if source_directives.exists():
+        target_directives.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_directives, target_directives)
+        copied.append(target_directives)
+    if source_story.exists():
+        target_story.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_story, target_story)
+        copied.append(target_story)
+    return copied
+
+
 def resolve_ffmpeg(preferred_path: str) -> str:
     if preferred_path:
         candidate = Path(preferred_path)
@@ -326,6 +470,59 @@ def probe_video_duration_seconds(video_path: Path) -> float:
         return float(seconds)
     except Exception as exc:  # pragma: no cover - dependency/runtime specific.
         raise RuntimeError(f"Could not read video duration for: {video_path}") from exc
+
+
+def resolve_ffprobe(ffmpeg_exe: str) -> str | None:
+    ffmpeg_path = Path(ffmpeg_exe)
+    ffprobe_name = "ffprobe.exe" if ffmpeg_path.name.lower().endswith(".exe") else "ffprobe"
+    sibling = ffmpeg_path.with_name(ffprobe_name)
+    if sibling.exists():
+        return str(sibling)
+    found = shutil.which("ffprobe")
+    if found:
+        return found
+    return None
+
+
+def probe_video_has_audio(video_path: Path, ffmpeg_exe: str) -> bool:
+    ffprobe_exe = resolve_ffprobe(ffmpeg_exe)
+    if ffprobe_exe:
+        process = subprocess.run(
+            [
+                ffprobe_exe,
+                "-v",
+                "error",
+                "-select_streams",
+                "a",
+                "-show_entries",
+                "stream=index",
+                "-of",
+                "csv=p=0",
+                str(video_path),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if process.returncode == 0:
+            return bool((process.stdout or "").strip())
+
+    fallback = subprocess.run(
+        [ffmpeg_exe, "-i", str(video_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    diagnostic = ((fallback.stdout or "") + "\n" + (fallback.stderr or "")).lower()
+    return " audio: " in diagnostic
+
+
+def collect_video_file_stats(video_path: Path, ffmpeg_exe: str) -> dict[str, float | int | bool]:
+    return {
+        "video_length_seconds": probe_video_duration_seconds(video_path),
+        "video_size_bytes": int(video_path.stat().st_size),
+        "has_audio": bool(probe_video_has_audio(video_path, ffmpeg_exe)),
+    }
 
 
 def build_cursor_overlay_filter(cursor_events: list[dict[str, float | str]], duration_seconds: float) -> str:
@@ -981,7 +1178,8 @@ def create_video_from_actions(
     actions: list[dict],
     output_path: Path,
     args: argparse.Namespace,
-) -> None:
+) -> dict[str, float | int | bool]:
+    capture_start = time.perf_counter()
     webm_path, cursor_events = record_actions_to_webm(
         base_url=base_url,
         actions=actions,
@@ -993,14 +1191,33 @@ def create_video_from_actions(
         show_mouse_overlay=args.show_mouse_overlay,
         pre_click_delay_seconds=max(float(args.pre_click_delay_seconds), 0.0),
     )
+    raw_video_generation_seconds = time.perf_counter() - capture_start
+    transcode_seconds = 0.0
+    overlay_seconds = 0.0
+    post_processing_seconds = 0.0
+    ffmpeg_exe = ""
     try:
         ffmpeg_exe = resolve_ffmpeg(args.ffmpeg_path)
+        post_start = time.perf_counter()
+        transcode_start = time.perf_counter()
         transcode_webm_to_mp4(ffmpeg_exe=ffmpeg_exe, source_webm=webm_path, target_mp4=output_path, fps=args.fps)
+        transcode_seconds = time.perf_counter() - transcode_start
         if args.show_mouse_overlay:
+            overlay_start = time.perf_counter()
             annotate_cursor_on_mp4(ffmpeg_exe=ffmpeg_exe, video_path=output_path, cursor_events=cursor_events, fps=args.fps)
+            overlay_seconds = time.perf_counter() - overlay_start
+        post_processing_seconds = time.perf_counter() - post_start
     finally:
         if webm_path.exists():
             webm_path.unlink()
+    performance: dict[str, float | int | bool] = {
+        "raw_video_generation_seconds": raw_video_generation_seconds,
+        "post_processing_seconds": post_processing_seconds,
+        "transcode_seconds": transcode_seconds,
+        "overlay_seconds": overlay_seconds,
+    }
+    performance.update(collect_video_file_stats(output_path, ffmpeg_exe))
+    return performance
 
 
 def run_site_videos(args: argparse.Namespace) -> list[Path]:
@@ -1016,14 +1233,42 @@ def run_site_videos(args: argparse.Namespace) -> list[Path]:
         if args.output_mode in ("both", "outcome"):
             outcome_output = media_dir / "tutorial-outcome.mp4"
             print(f"Recording tutorial outcome video to: {outcome_output}")
-            create_video_from_actions(base_url, build_outcome_actions(pages), outcome_output, args)
+            outcome_actions = build_outcome_actions(pages)
+            outcome_perf = create_video_from_actions(base_url, outcome_actions, outcome_output, args)
             outputs.append(outcome_output)
+            outcome_directives, outcome_story = write_video_sidecars(
+                video_path=outcome_output,
+                workflow_name="site-videos/outcome",
+                story_summary=(
+                    "Show the tutorial site outcome path as a guided viewer journey across key lessons, "
+                    "including showcase tab toggles and readable scroll reveals."
+                ),
+                args=args,
+                actions=outcome_actions,
+                performance=outcome_perf,
+                story_notes=["Target viewer should understand what the finished tutorial site delivers."],
+            )
+            outputs.extend([outcome_directives, outcome_story])
 
         if args.output_mode in ("both", "process"):
             process_output = media_dir / "learning-process-fast.mp4"
             print(f"Recording learning process video to: {process_output}")
-            create_video_from_actions(base_url, build_process_actions(pages), process_output, args)
+            process_actions = build_process_actions(pages)
+            process_perf = create_video_from_actions(base_url, process_actions, process_output, args)
             outputs.append(process_output)
+            process_directives, process_story = write_video_sidecars(
+                video_path=process_output,
+                workflow_name="site-videos/process",
+                story_summary=(
+                    "Walk through the learning-process perspective across tutorial pages, preserving a clear "
+                    "sense of progression and pacing."
+                ),
+                args=args,
+                actions=process_actions,
+                performance=process_perf,
+                story_notes=["Target viewer should see how the learning path unfolds step-by-step."],
+            )
+            outputs.extend([process_directives, process_story])
 
     if args.generate_fallback_copies:
         for source, fallback_name in [
@@ -1034,6 +1279,7 @@ def run_site_videos(args: argparse.Namespace) -> list[Path]:
                 target = media_dir / fallback_name
                 shutil.copy2(source, target)
                 outputs.append(target)
+                outputs.extend(copy_sidecar_files(source, target))
                 print(f"Created fallback copy: {target}")
     return outputs
 
@@ -1047,10 +1293,20 @@ def run_html_tour(args: argparse.Namespace) -> list[Path]:
 
     output_path = media_dir / args.tour_output
     pages = parse_pages(args.tour_pages)
+    actions = build_tour_actions(pages)
     with local_http_server(site_dir) as base_url:
         print(f"Recording html tour to: {output_path}")
-        create_video_from_actions(base_url, build_tour_actions(pages), output_path, args)
-    return [output_path]
+        perf = create_video_from_actions(base_url, actions, output_path, args)
+    directives_path, story_path = write_video_sidecars(
+        video_path=output_path,
+        workflow_name="html-tour",
+        story_summary="Provide a concise guided tour through selected local HTML tutorial pages.",
+        args=args,
+        actions=actions,
+        performance=perf,
+        story_notes=["Use this as a reusable walkthrough template for any lesson subset."],
+    )
+    return [output_path, directives_path, story_path]
 
 
 def run_concept_slideshow(args: argparse.Namespace) -> list[Path]:
@@ -1060,6 +1316,7 @@ def run_concept_slideshow(args: argparse.Namespace) -> list[Path]:
     media_dir.mkdir(parents=True, exist_ok=True)
     output_path = media_dir / args.slideshow_output
 
+    actions = []
     with tempfile.TemporaryDirectory(prefix="concept-slideshow-") as tmpdir:
         temp_root = Path(tmpdir)
         html_path = temp_root / "slides.html"
@@ -1069,8 +1326,23 @@ def run_concept_slideshow(args: argparse.Namespace) -> list[Path]:
         actions = [{"type": "goto", "path": "slides.html", "wait_seconds": 0.7}, {"type": "wait", "seconds": total_seconds}]
         with local_http_server(temp_root) as base_url:
             print(f"Recording concept slideshow to: {output_path}")
-            create_video_from_actions(base_url, actions, output_path, args)
-    return [output_path]
+            perf = create_video_from_actions(base_url, actions, output_path, args)
+    directives_path, story_path = write_video_sidecars(
+        video_path=output_path,
+        workflow_name="concept-slideshow",
+        story_summary=(
+            f"Translate a concept into a paced slide narrative: {len(slides)} slide(s) from source concept text."
+        ),
+        args=args,
+        actions=actions,
+        performance=perf,
+        story_notes=[
+            f"Slides generated: {len(slides)}",
+            f"Slide duration: {args.slide_duration:.2f}s",
+            "Refine concept wording and points-per-slide to steer the next iteration.",
+        ],
+    )
+    return [output_path, directives_path, story_path]
 
 
 def main(argv: list[str]) -> int:
