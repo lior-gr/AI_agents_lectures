@@ -518,6 +518,7 @@ class DemoDirector:
         self.pre_click_delay_seconds = max(float(self.args.pre_click_delay_seconds), 0.0)
         self.mouse_x = 24.0
         self.mouse_y = 24.0
+        self.mouse_visible = True
         self.click_highlight_until = 0.0
 
         self.capture_timer = QTimer()
@@ -557,6 +558,7 @@ class DemoDirector:
         self.current_goal_text = goal
         self.char_cursor = 0
         self._set_mouse_to_input_typing_point()
+        self.mouse_visible = False
         self.window.goal_input.clear()
         self.typing_timer.start(self.typing_interval_ms)
 
@@ -623,6 +625,7 @@ class DemoDirector:
         center = widget.mapTo(self.window, widget.rect().center())
         self.mouse_x = float(center.x())
         self.mouse_y = float(center.y())
+        self.mouse_visible = True
 
     def _draw_mouse_overlay(self, pixmap) -> None:
         from PySide6.QtCore import QPointF, Qt
@@ -638,12 +641,13 @@ class DemoDirector:
             painter.setPen(QPen(QColor(255, 76, 76, 80), 2))
             painter.drawEllipse(QPointF(self.mouse_x, self.mouse_y), 38, 38)
 
-        # Non-occluding pointer marker: hollow rings only.
-        painter.setPen(QPen(QColor(0, 0, 0, 150), 2))
-        painter.setBrush(Qt.NoBrush)
-        painter.drawEllipse(QPointF(self.mouse_x, self.mouse_y), 10, 10)
-        painter.setPen(QPen(QColor(255, 230, 0, 170), 2))
-        painter.drawEllipse(QPointF(self.mouse_x, self.mouse_y), 7, 7)
+        if self.mouse_visible:
+            # Non-occluding pointer marker: hollow rings only.
+            painter.setPen(QPen(QColor(0, 0, 0, 150), 2))
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(QPointF(self.mouse_x, self.mouse_y), 10, 10)
+            painter.setPen(QPen(QColor(255, 230, 0, 170), 2))
+            painter.drawEllipse(QPointF(self.mouse_x, self.mouse_y), 7, 7)
         painter.end()
 
     def _force_finish(self) -> None:

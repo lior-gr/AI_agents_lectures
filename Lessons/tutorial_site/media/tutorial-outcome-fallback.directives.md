@@ -1,6 +1,6 @@
 # Video Directives: tutorial-outcome.mp4
 
-- Generated (UTC): `2026-02-17T05:36:48+00:00`
+- Generated (UTC): `2026-02-17T05:44:22+00:00`
 - Tool: `gui_demo_video_creator`
 - Output video: `C:\here\AI_agents_lectures\Lessons\tutorial_site\media\tutorial-outcome.mp4`
 
@@ -29,13 +29,13 @@
 - Keep goals deterministic so result comparisons across iterations stay meaningful.
 
 ## Performance Status
-- Raw video generation (seconds): `57.375`
-- Post processing (seconds): `12.477`
-- Transcode step (seconds): `12.477`
+- Raw video generation (seconds): `58.212`
+- Post processing (seconds): `12.195`
+- Transcode step (seconds): `12.195`
 - Overlay step (seconds): `0.000`
-- Video length (seconds): `51.080`
-- Video size on disk (bytes): `348405`
+- Video length (seconds): `50.830`
+- Video size on disk (bytes): `340261`
 - Has audio stream: `False`
-- Directives generation (seconds): `0.002052`
-- Story generation (seconds): `0.001791`
-- Sidecar generation total (seconds): `0.003843`
+- Directives generation (seconds): `0.001573`
+- Story generation (seconds): `0.001281`
+- Sidecar generation total (seconds): `0.002853`
